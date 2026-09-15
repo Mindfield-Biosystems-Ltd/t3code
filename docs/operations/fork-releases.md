@@ -4,7 +4,9 @@ The fork ships the desktop client and its bundled per-machine server, including 
 
 ## Enable the release path
 
-Keep `fork-nightly-sync.yml` on the repository's default branch, since GitHub schedules only run there. Set `FORK_RELEASE_BRANCH` to the maintained branch that receives reviewed merges, and ensure that branch contains both fork workflows and the Agents implementation. The default is `main`. The current Agents PR #2 targets `agents-board-base-6abdf37a5`; merging it alone does not install a scheduled workflow on `main`. Either use that integration branch as the default/release branch, or land the reviewed feature on `main` first.
+`main` is the fork’s default and release branch (`FORK_RELEASE_BRANCH=main`). PR #2 targets `main`; merging it installs both the Agents implementation and the workflows there. GitHub schedules only run from the default branch. Each subsequent reviewed merge to `main` triggers a fork release when `FORK_RELEASE_ENABLED=true`.
+
+`main` requires a pull request and resolution of review conversations, including for administrators. Force-pushes and branch deletion are blocked. Only the owner and explicitly invited write-access collaborators can merge. Automatic merging is disabled. Approve a contributor by granting repository collaborator access; do not grant write access merely so someone can submit a PR.
 
 The workflows are restricted to `jayleaton/t3code` and stay inactive until `FORK_RELEASE_ENABLED=true`. Before enabling, configure the following GitHub repository variables:
 
