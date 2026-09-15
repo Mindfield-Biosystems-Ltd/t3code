@@ -24,8 +24,10 @@ import {
   TurnId,
   type ProviderRuntimeEvent,
 } from "@t3tools/contracts";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 
 import { ServerConfig } from "../../config.ts";
+import { execScriptSource, writeFakeCli } from "../../testUtils/fakeCli.ts";
 import {
   grokPromptSettlementBelongsToContext,
   isGrokEnterPlanModeToolCall,
@@ -33,8 +35,7 @@ import {
   nextGrokPlanModeActive,
   selectGrokPermissionOptionId,
 } from "./GrokAdapter.ts";
-import { execScriptSource, writeFakeCli } from "../../testUtils/fakeCli.ts";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+
 const decodeGrokSettings = Schema.decodeSync(GrokSettings);
 
 const __dirname = NodePath.dirname(NodeURL.fileURLToPath(import.meta.url));
@@ -232,6 +233,65 @@ it.layer(grokAdapterTestLayer)("GrokAdapterLive", (it) => {
     }),
   );
 
+  for (const taskType of ["monitor", "shell"] as const) {
+    it.effect(`emits the ${taskType} background lifecycle`, () =>
+      Effect.gen(function* () {
+        const threadId = ThreadId.make(`grok-background-${taskType}`);
+        const wrapperPath = yield* Effect.promise(() =>
+          makeMockGrokWrapper({
+            [taskType === "monitor"
+              ? "T3_ACP_EMIT_GROK_MONITOR_POST_TURN_POLL"
+              : "T3_ACP_EMIT_GROK_BACKGROUND_TASK_STARTED"]: "1",
+          }),
+        );
+        const adapter = yield* makeTestAdapter(wrapperPath);
+        const events: ProviderRuntimeEvent[] = [];
+        const finished = yield* Deferred.make<void>();
+        const eventsFiber = yield* Stream.runForEach(adapter.streamEvents, (event) =>
+          Effect.gen(function* () {
+            events.push(event);
+            if (event.type === (taskType === "monitor" ? "task.completed" : "turn.completed")) {
+              yield* Deferred.succeed(finished, undefined);
+            }
+          }),
+        ).pipe(Effect.forkChild);
+        yield* adapter.startSession({ threadId, cwd: process.cwd(), runtimeMode: "full-access" });
+        yield* adapter.sendTurn({ threadId, input: "watch the unit" });
+        yield* Deferred.await(finished).pipe(Effect.timeout("3 seconds"));
+
+        const started = events.find((event) => event.type === "task.started");
+        const taskId =
+          taskType === "monitor"
+            ? "01a05f41-5107-7550-821e-79e8d1cd7687"
+            : "call-fb9d0000-0000-0000-0000-000000000026";
+        assert.equal(started?.payload.taskType, taskType);
+        assert.equal(started?.payload.taskId, taskId);
+        if (taskType === "monitor") {
+          const completed = events.find((event) => event.type === "task.completed");
+          const turnEnd = events.findIndex((event) => event.type === "turn.completed");
+          assert.equal(completed?.payload.status, "completed");
+          assert.equal(completed?.payload.taskId, taskId);
+          assert.equal(completed?.turnId, undefined);
+          assert.isAtLeast(turnEnd, 0);
+          assert.isAbove(
+            events.findIndex((event) => event.type === "task.completed"),
+            turnEnd,
+          );
+          assert.deepEqual(
+            events
+              .slice(turnEnd + 1)
+              .filter((event) => event.type === "item.updated" || event.type === "item.completed"),
+            [],
+          );
+        } else {
+          assert.equal(started?.payload.description, "sleep 40; echo done-a");
+        }
+        yield* Fiber.interrupt(eventsFiber);
+        yield* adapter.stopSession(threadId);
+      }).pipe(TestClock.withLive),
+    );
+  }
+
   it.effect("sends runtime context with the current model without changing saved prompts", () =>
     Effect.gen(function* () {
       const threadId = ThreadId.make("grok-runtime-context");
@@ -292,6 +352,96 @@ it.layer(grokAdapterTestLayer)("GrokAdapterLive", (it) => {
       assert.include(prompts[1]?.[1]?.text, "with low reasoning effort");
       assert.include(prompts[1]?.[1]?.text, "embed images and videos");
     }),
+  );
+
+  it.effect(
+    "keeps frozen agent rules in initialization and runtime context out of saved prompts",
+    () =>
+      Effect.gen(function* () {
+        const threadId = ThreadId.make("grok-runtime-context");
+        const tempDir = yield* Effect.promise(() =>
+          NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "grok-runtime-context-")),
+        );
+        const requestLogPath = NodePath.join(tempDir, "requests.ndjson");
+        const wrapperPath = yield* Effect.promise(() =>
+          makeMockGrokWrapper({ T3_ACP_REQUEST_LOG_PATH: requestLogPath }),
+        );
+        const adapter = yield* makeTestAdapter(wrapperPath);
+        yield* adapter.startSession({
+          threadId,
+          agentInstructions: "Act as the research agent.",
+          cwd: process.cwd(),
+          runtimeMode: "full-access",
+          modelSelection: { instanceId: ProviderInstanceId.make("grok"), model: "grok-mock-alt" },
+        });
+        yield* adapter.sendTurn({ threadId, input: "First prompt" });
+        yield* adapter.sendTurn({
+          threadId,
+          input: "Second prompt",
+          agentInstructions: "Do not replace the frozen session rules.",
+          modelSelection: {
+            instanceId: ProviderInstanceId.make("grok"),
+            model: "grok-4.6",
+            options: [{ id: "reasoningEffort", value: "low" }],
+          },
+        });
+        const snapshot = yield* adapter.readThread(threadId);
+        assert.deepEqual(
+          snapshot.turns.map((turn) => turn.items),
+          [
+            [
+              {
+                prompt: [{ type: "text", text: "First prompt" }],
+                result: { stopReason: "end_turn" },
+              },
+            ],
+            [
+              {
+                prompt: [{ type: "text", text: "Second prompt" }],
+                result: { stopReason: "end_turn" },
+              },
+            ],
+          ],
+        );
+        yield* adapter.stopSession(threadId);
+        const requests = yield* Effect.promise(() => readJsonLines(requestLogPath));
+        const prompts = requests
+          .filter((request) => request.method === "session/prompt")
+          .map(
+            (request) =>
+              (request.params as { prompt: Array<{ type: string; text: string }> }).prompt,
+          );
+        assert.equal(prompts.length, 2);
+        assert.deepEqual(prompts[0]?.[0], { type: "text", text: "First prompt" });
+        assert.include(prompts[0]?.[1]?.text, "Grok harness, as grok-mock-alt");
+        assert.deepEqual(prompts[1]?.[0], { type: "text", text: "Second prompt" });
+        assert.include(prompts[1]?.[1]?.text, "Grok harness, as grok-4.6");
+        assert.include(prompts[1]?.[1]?.text, "with low reasoning effort");
+        assert.include(prompts[1]?.[1]?.text, "embed images and videos");
+        assert.equal(requests.filter((request) => request.method === "initialize").length, 1);
+        assert.deepEqual(
+          (
+            requests.find((request) => request.method === "initialize")?.params as {
+              _meta: unknown;
+            }
+          )?._meta,
+          { rules: "Act as the research agent." },
+        );
+        assert.notInclude(
+          prompts
+            .flat()
+            .map((part) => part.text)
+            .join("\n"),
+          "Act as the research agent.",
+        );
+        assert.notInclude(
+          prompts
+            .flat()
+            .map((part) => part.text)
+            .join("\n"),
+          "Do not replace the frozen session rules.",
+        );
+      }),
   );
 
   it.effect("starts a session and maps mock ACP prompt flow to runtime events", () =>

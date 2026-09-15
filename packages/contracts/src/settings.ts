@@ -214,6 +214,14 @@ const DEFAULT_SNAP_SHOT_SHORTCUT: SnapShotShortcut = {
   kind: "both-shift-keys",
 };
 
+export const NotificationMode = Schema.Literals([
+  "off",
+  "notifications",
+  "sound",
+  "notifications-and-sound",
+]);
+export type NotificationMode = typeof NotificationMode.Type;
+
 export const QuitConfirmationMode = Schema.Literals(["direct", "hold", "double-click"]);
 export type QuitConfirmationMode = typeof QuitConfirmationMode.Type;
 const DEFAULT_QUIT_CONFIRMATION_MODE: QuitConfirmationMode = "hold";
@@ -280,6 +288,10 @@ export const LoadBalancingWeights = Schema.Record(
 export const DiffColorScheme = Schema.Literals(["red-green", "blue-orange"]);
 
 export const ClientSettingsSchema = Schema.Struct({
+  notificationMode: NotificationMode.pipe(
+    Schema.withDecodingDefault(Effect.succeed("off" as const)),
+  ),
+  inAppNotificationsEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   diffColorScheme: DiffColorScheme.pipe(
     Schema.withDecodingDefault(Effect.succeed("red-green" as const)),
   ),
@@ -932,12 +944,96 @@ export const BackgroundActivitySettings = Schema.Struct({
 }).pipe(Schema.withDecodingDefault(Effect.succeed({})));
 export type BackgroundActivitySettings = typeof BackgroundActivitySettings.Type;
 
+export const McpGatewayProfile = Schema.Struct({
+  description: Schema.optional(Schema.String.check(Schema.isMaxLength(280))),
+  color: Schema.optional(Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/))),
+  icon: Schema.optional(
+    Schema.Literals(["orb", "bot", "code", "pen", "search", "shield", "sparkles", "terminal"]),
+  ),
+  systemPrompt: Schema.optional(Schema.String.check(Schema.isMaxLength(32_000))),
+  profileId: TrimmedNonEmptyString,
+  name: TrimmedNonEmptyString,
+  revision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  /**
+   * Readable selection text. These labels — not IDs — are the persisted
+   * profile data the Settings UI writes and the agent reads. Routing keys
+   * (provider instance id, model slug) are resolved transiently at thread
+   * creation from the live provider catalog and never serialized here.
+   */
+  providerLabel: Schema.optional(TrimmedNonEmptyString),
+  modelLabel: Schema.optional(TrimmedNonEmptyString),
+  /**
+   * Legacy routing snapshot from pre-v3 rows, kept decodable so existing
+   * settings files keep working until the profile is re-saved through the
+   * label pickers. New profile writes never populate this field.
+   */
+  modelSelection: Schema.optional(ModelSelection),
+  reasoningEffort: Schema.optional(TrimmedNonEmptyString),
+  runtimeMode: Schema.Literals([
+    "approval-required",
+    "auto-accept-edits",
+    "auto",
+    "full-access",
+    "read-only",
+  ]),
+  interactionMode: Schema.Literals(["default", "plan"]),
+  environmentIds: Schema.optional(Schema.Array(TrimmedNonEmptyString)),
+  createdAt: TrimmedNonEmptyString,
+  updatedAt: TrimmedNonEmptyString,
+});
+export type McpGatewayProfile = typeof McpGatewayProfile.Type;
+
+const McpGatewayProfiles = Schema.Array(McpGatewayProfile).check(
+  Schema.makeFilter((profiles) => {
+    const names = new Set<string>();
+    for (const profile of profiles) {
+      if (names.has(profile.name)) return `Duplicate gateway profile name '${profile.name}'.`;
+      names.add(profile.name);
+    }
+    return true;
+  }),
+);
+
+/** Human-readable permission-mode label for MCP gateway profiles. */
+export const MCP_GATEWAY_RUNTIME_MODE_LABELS: Record<McpGatewayProfile["runtimeMode"], string> = {
+  "approval-required": "Approval required",
+  "auto-accept-edits": "Auto-accept edits",
+  auto: "Auto",
+  "full-access": "Full access",
+  "read-only": "Read only",
+};
+
+/**
+ * One-sentence readable summary of a gateway profile. Built from the
+ * readable labels only — never falls back to instance/model IDs.
+ */
+export const formatMcpGatewayProfileSummary = (
+  profile: McpGatewayProfile,
+  unavailable = false,
+): string => {
+  const selection =
+    profile.providerLabel !== undefined && profile.modelLabel !== undefined
+      ? `${profile.providerLabel} ${profile.modelLabel}`
+      : "unselected provider/model";
+  const reasoning = profile.reasoningEffort === undefined ? "default" : profile.reasoningEffort;
+  const availability = unavailable ? " (provider or model currently unavailable — re-select)" : "";
+  return `${profile.name} — ${selection}, ${reasoning} reasoning, ${MCP_GATEWAY_RUNTIME_MODE_LABELS[profile.runtimeMode]}${availability}`;
+};
 /**
  * Server settings a project may override. Every other server setting is
  * environment-wide: providers, keybindings, observability, device hosts,
  * background activity, theme. UI, search and the write planner derive
  * eligibility from this list, so adding a key here is the whole opt-in.
  */
+/**
+ * How assistant text reaches clients while a turn runs.
+ * - `turn`: hold the whole message until the turn finishes or pauses.
+ * - `paragraph`: deliver each finished paragraph or closed code block.
+ * - `token`: forward every provider delta. Legacy, kept for compatibility.
+ */
+export const ResponseStreamingMode = Schema.Literals(["turn", "paragraph", "token"]);
+export type ResponseStreamingMode = typeof ResponseStreamingMode.Type;
+
 export const PROJECT_SCOPED_SERVER_SETTING_KEYS = [
   "defaultModelSelection",
   "defaultRuntimeMode",
@@ -954,7 +1050,7 @@ export const PROJECT_SCOPED_SERVER_SETTING_KEYS = [
   "sidebarAutoSettleOnMerge",
   "sidebarAutoSettleAfterDays",
   "continueThreadsAfterServerUpdate",
-  "enableLegacyTokenStreaming",
+  "responseStreamingMode",
 ] as const;
 export type ProjectScopedServerSettingKey = (typeof PROJECT_SCOPED_SERVER_SETTING_KEYS)[number];
 
@@ -979,16 +1075,17 @@ export const ProjectSettingsOverrides = Schema.Struct({
   sidebarAutoSettleOnMerge: Schema.optionalKey(Schema.Boolean),
   sidebarAutoSettleAfterDays: Schema.optionalKey(Schema.NullOr(SidebarAutoSettleAfterDays)),
   continueThreadsAfterServerUpdate: Schema.optionalKey(Schema.Boolean),
-  enableLegacyTokenStreaming: Schema.optionalKey(Schema.Boolean),
+  responseStreamingMode: Schema.optionalKey(ResponseStreamingMode),
 } satisfies Record<ProjectScopedServerSettingKey, unknown>);
 export type ProjectSettingsOverrides = typeof ProjectSettingsOverrides.Type;
 
 export const ServerSettings = Schema.Struct({
-  // Legacy token-by-token assistant output. Deliberately a fresh key (was
+  // How assistant text reaches clients during a turn. Deliberately a fresh
+  // key (was `enableLegacyTokenStreaming`, before that
   // `enableAssistantStreaming`): decoding drops the old key, so everyone,
-  // including prior opt-ins, resets to the buffered default.
-  enableLegacyTokenStreaming: Schema.Boolean.pipe(
-    Schema.withDecodingDefault(Effect.succeed(false)),
+  // including prior token-streaming opt-ins, resets to the paragraph default.
+  responseStreamingMode: ResponseStreamingMode.pipe(
+    Schema.withDecodingDefault(Effect.succeed("paragraph" as const)),
   ),
   enableProviderUpdateChecks: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   // Retain the update-era key; recovery now needs an environment-owned opt-in.
@@ -1106,6 +1203,10 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed(true)),
   ),
   addProjectBaseDirectory: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  mcpGatewayProfileDeletedAt: Schema.Record(Schema.String, Schema.String).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
+  mcpGatewayProfiles: McpGatewayProfiles.pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   textGenerationModelSelection: ModelSelection.pipe(
     Schema.withDecodingDefault(
       Effect.succeed({
@@ -1323,7 +1424,7 @@ const OpenCodeSettingsPatch = Schema.Struct({
 
 export const ServerSettingsPatch = Schema.Struct({
   // Server settings
-  enableLegacyTokenStreaming: Schema.optionalKey(Schema.Boolean),
+  responseStreamingMode: Schema.optionalKey(ResponseStreamingMode),
   enableProviderUpdateChecks: Schema.optionalKey(Schema.Boolean),
   continueThreadsAfterServerUpdate: Schema.optionalKey(Schema.Boolean),
   enableAgentBrowserAccess: Schema.optionalKey(Schema.Boolean),
@@ -1371,6 +1472,8 @@ export const ServerSettingsPatch = Schema.Struct({
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
   newWorktreesStartFromOrigin: Schema.optionalKey(Schema.Boolean),
   addProjectBaseDirectory: Schema.optionalKey(TrimmedString),
+  mcpGatewayProfileDeletedAt: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+  mcpGatewayProfiles: Schema.optionalKey(McpGatewayProfiles),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
   sourceControlWritingStyle: Schema.optionalKey(
     Schema.Struct({
@@ -1416,6 +1519,8 @@ export const ServerSettingsPatch = Schema.Struct({
 export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;
 
 export const ClientSettingsPatch = Schema.Struct({
+  notificationMode: Schema.optionalKey(NotificationMode),
+  inAppNotificationsEnabled: Schema.optionalKey(Schema.Boolean),
   diffColorScheme: Schema.optionalKey(DiffColorScheme),
   loadBalancingEnabled: Schema.optionalKey(Schema.Boolean),
   loadBalancingWeights: Schema.optionalKey(LoadBalancingWeights),
@@ -1496,3 +1601,49 @@ export const ClientSettingsPatch = Schema.Struct({
   wordWrap: Schema.optionalKey(Schema.Boolean),
 });
 export type ClientSettingsPatch = typeof ClientSettingsPatch.Type;
+
+/** Reconcile portable agents by identity; deletion wins an equal timestamp. */
+export function mergeAgentLibraries(
+  libraries: ReadonlyArray<{
+    readonly mcpGatewayProfiles: ReadonlyArray<McpGatewayProfile>;
+    readonly mcpGatewayProfileDeletedAt?: Readonly<Record<string, string>>;
+  }>,
+) {
+  const deleted: Record<string, string> = {};
+  const profiles = new Map<string, McpGatewayProfile>();
+  for (const library of libraries) {
+    for (const [id, at] of Object.entries(library.mcpGatewayProfileDeletedAt ?? {})) {
+      if (at > (deleted[id] ?? "")) deleted[id] = at;
+    }
+    for (const candidate of library.mcpGatewayProfiles) {
+      const previous = profiles.get(candidate.profileId);
+      if (
+        !previous ||
+        candidate.updatedAt > previous.updatedAt ||
+        (candidate.updatedAt === previous.updatedAt &&
+          JSON.stringify(candidate) > JSON.stringify(previous))
+      )
+        profiles.set(candidate.profileId, candidate);
+    }
+  }
+  const names = new Set<string>();
+  const result = [...profiles.values()]
+    .filter((p) => p.updatedAt > (deleted[p.profileId] ?? ""))
+    .sort(
+      (a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.profileId.localeCompare(b.profileId),
+    )
+    .filter((p) => {
+      if (names.has(p.name)) return false;
+      names.add(p.name);
+      return true;
+    })
+    .sort(
+      (a, b) => a.createdAt.localeCompare(b.createdAt) || a.profileId.localeCompare(b.profileId),
+    );
+  return {
+    mcpGatewayProfiles: result,
+    mcpGatewayProfileDeletedAt: Object.fromEntries(
+      Object.entries(deleted).sort(([a], [b]) => a.localeCompare(b)),
+    ),
+  };
+}

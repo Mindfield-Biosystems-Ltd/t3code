@@ -204,6 +204,7 @@ it.effect("resolveAutoBootstrapWelcomeTargets returns existing project and threa
         readEvents: () => Stream.empty,
         readThreadEvents: () => Stream.empty,
         getThreadReplayStats: () => Effect.die("unused thread replay stats"),
+        getCommandReceipts: () => Effect.succeed([]),
         dispatch: (command) =>
           Ref.update(dispatchCalls, (calls) => [...calls, command.type]).pipe(
             Effect.as({ sequence: 1 }),
@@ -332,6 +333,7 @@ it.effect.each([
         readEvents: () => Stream.empty,
         readThreadEvents: () => Stream.empty,
         getThreadReplayStats: () => Effect.die("unused thread replay stats"),
+        getCommandReceipts: () => Effect.succeed([]),
         dispatch: (command) =>
           Ref.update(dispatchCalls, (calls) => [...calls, command]).pipe(
             Effect.as({ sequence: 1 }),
@@ -409,6 +411,7 @@ it.effect(
             ),
           streamDomainEvents: Stream.empty,
           subscribeDomainEvents: Effect.succeed(Stream.empty),
+          getCommandReceipts: () => Effect.succeed([]),
           latestSequence: Effect.succeed(0),
         } satisfies OrchestrationEngine.OrchestrationEngineService["Service"]),
         Effect.provide(NodeServices.layer),
@@ -466,6 +469,7 @@ it.effect("resolveAutoBootstrapWelcomeTargets preserves typed UUID generation fa
         readEvents: () => Stream.empty,
         readThreadEvents: () => Stream.empty,
         getThreadReplayStats: () => Effect.die("unused thread replay stats"),
+        getCommandReceipts: () => Effect.succeed([]),
         dispatch: (command) =>
           Ref.update(dispatchCalls, (calls) => [...calls, command.type]).pipe(
             Effect.as({ sequence: 1 }),

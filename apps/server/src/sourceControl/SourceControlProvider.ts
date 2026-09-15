@@ -14,6 +14,8 @@ export interface SourceControlProviderContext {
   readonly provider: SourceControlProviderInfo;
   readonly remoteName: string;
   readonly remoteUrl: string;
+  /** An explicit web authority can disambiguate Forgejo logins sharing an SSH alias. */
+  readonly requestedHost?: string;
 }
 
 export interface SourceControlRefSelector {
@@ -105,6 +107,7 @@ export class SourceControlProvider extends Context.Service<
       readonly headSelector: string;
       readonly title: string;
       readonly bodyFile: string;
+      readonly draft?: boolean;
     }) => Effect.Effect<void, SourceControlProviderError>;
     readonly getRepositoryCloneUrls: (input: {
       readonly cwd: string;

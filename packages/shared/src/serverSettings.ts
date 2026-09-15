@@ -367,6 +367,9 @@ export function applyServerSettingsPatch(
           ),
         }
       : {}),
+    ...(patch.mcpGatewayProfiles !== undefined
+      ? { mcpGatewayProfiles: patch.mcpGatewayProfiles }
+      : {}),
     ...(patch.sourceControlWriterModelSelection !== undefined
       ? { sourceControlWriterModelSelection: patch.sourceControlWriterModelSelection }
       : {}),

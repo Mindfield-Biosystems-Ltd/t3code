@@ -19,12 +19,40 @@ import * as DesktopBackendManager from "../../backend/DesktopBackendManager.ts";
 import * as DesktopBackendPool from "../../backend/DesktopBackendPool.ts";
 import * as ElectronDialog from "../../electron/ElectronDialog.ts";
 import * as ElectronWindow from "../../electron/ElectronWindow.ts";
+import * as DesktopAppSettings from "../../settings/DesktopAppSettings.ts";
+import type { DesktopSettings } from "../../settings/DesktopAppSettings.ts";
 import {
+  revealWindow,
   getLocalEnvironmentBootstraps,
   getWindowFullscreenState,
   pasteAsText,
   pickProjectFavicon,
+  resolveMcpGatewayLaunchConfig,
 } from "./window.ts";
+
+describe("resolveMcpGatewayLaunchConfig", () => {
+  it("returns an Electron-as-Node command only for packaged desktop builds", () => {
+    assert.isNull(
+      resolveMcpGatewayLaunchConfig({
+        isPackaged: false,
+        executablePath: "/app/T3 Code",
+        resourcesPath: "/app/resources",
+      }),
+    );
+    assert.deepEqual(
+      resolveMcpGatewayLaunchConfig({
+        isPackaged: true,
+        executablePath: "/app/T3 Code",
+        resourcesPath: "/app/resources",
+      }),
+      {
+        command: "/app/T3 Code",
+        args: ["/app/resources/t3-mcp-gateway.mjs"],
+        env: { ELECTRON_RUN_AS_NODE: "1" },
+      },
+    );
+  });
+});
 
 const readyWslConfig: DesktopBackendManager.DesktopBackendStartConfig = {
   executablePath: "wsl.exe",
@@ -208,19 +236,21 @@ describe("pasteAsText", () => {
 });
 
 describe("pickProjectFavicon", () => {
+  const pickerLayer = (pickFiles: () => Effect.Effect<Array<string>>, settings?: DesktopSettings) =>
+    Layer.mergeAll(
+      Layer.mock(ElectronDialog.ElectronDialog)({ pickFiles }),
+      Layer.mock(ElectronWindow.ElectronWindow)({
+        focusedMainOrFirst: Effect.succeed(Option.none()),
+      }),
+      DesktopAppSettings.layerTest(settings),
+    );
+
   it.effect("opens a single-image picker from the project directory", () =>
     Effect.gen(function* () {
       const pickFiles = vi.fn(() => Effect.succeed(["/pictures/icon.png"]));
-      const result = yield* pickProjectFavicon.handler("/project").pipe(
-        Effect.provide(
-          Layer.mergeAll(
-            Layer.mock(ElectronDialog.ElectronDialog)({ pickFiles }),
-            Layer.mock(ElectronWindow.ElectronWindow)({
-              focusedMainOrFirst: Effect.succeed(Option.none()),
-            }),
-          ),
-        ),
-      );
+      const result = yield* pickProjectFavicon
+        .handler("/project")
+        .pipe(Effect.provide(pickerLayer(pickFiles)));
 
       assert.strictEqual(result, "/pictures/icon.png");
       assert.deepEqual(pickFiles.mock.calls, [
@@ -239,5 +269,51 @@ describe("pickProjectFavicon", () => {
         ],
       ]);
     }),
+  );
+
+  it.effect("does not open a picker while the local environment is off", () =>
+    Effect.gen(function* () {
+      const pickFiles = vi.fn(() => Effect.succeed(["/pictures/icon.png"]));
+      const result = yield* pickProjectFavicon.handler("/project").pipe(
+        Effect.provide(
+          pickerLayer(pickFiles, {
+            ...DesktopAppSettings.DEFAULT_DESKTOP_SETTINGS,
+            localEnvironmentEnabled: false,
+          }),
+        ),
+      );
+
+      assert.strictEqual(result, null);
+      assert.strictEqual(pickFiles.mock.calls.length, 0);
+    }),
+  );
+});
+
+describe("revealWindow", () => {
+  it.effect("reveals the requesting renderer's window rather than the focused window", () => {
+    const window = { isDestroyed: () => false } as Electron.BrowserWindow;
+    const sender = {} as Electron.WebContents;
+    const reveal = vi.fn(() => Effect.void);
+    const fromWebContents = vi.fn(() => Effect.succeed(Option.some(window)));
+    return Effect.gen(function* () {
+      yield* revealWindow.handler(undefined, { sender });
+      assert.deepEqual(fromWebContents.mock.calls, [[sender]]);
+      assert.deepEqual(reveal.mock.calls, [[window]]);
+    }).pipe(Effect.provide(Layer.mock(ElectronWindow.ElectronWindow)({ fromWebContents, reveal })));
+  });
+
+  it.effect("fails when the sender has no window", () =>
+    Effect.gen(function* () {
+      const result = yield* revealWindow
+        .handler(undefined, { sender: {} as Electron.WebContents })
+        .pipe(Effect.match({ onFailure: (error) => error._tag, onSuccess: () => "succeeded" }));
+      assert.equal(result, "DesktopWindowUnavailable");
+    }).pipe(
+      Effect.provide(
+        Layer.mock(ElectronWindow.ElectronWindow)({
+          fromWebContents: () => Effect.succeed(Option.none()),
+        }),
+      ),
+    ),
   );
 });
