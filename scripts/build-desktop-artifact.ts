@@ -1267,7 +1267,7 @@ export function resolveMacPasskeySigningConfiguration(
   }
 
   return {
-    appId: DESKTOP_APP_ID,
+    appId: env.T3CODE_DESKTOP_APP_ID?.trim() || DESKTOP_APP_ID,
     teamId,
     rpDomains: uniqueRpDomains,
     provisioningProfilePath,
@@ -2582,11 +2582,22 @@ export function isDesktopPreviewVersion(version: string): boolean {
   return /-pr\./.test(version) || /-preview\.\d{8}\.\d+$/.test(version);
 }
 
-export function resolveDesktopWebAssetBrand(version: string): WebAssetBrand {
+export function resolveDesktopWebAssetBrand(version: string, brand?: string): WebAssetBrand {
+  if (brand === "agents") return "agents";
   return resolveWebAssetBrandForChannel(resolveDesktopUpdateChannel(version));
 }
 
-export function resolveDesktopBuildIconAssets(version: string): DesktopBuildIconAssets {
+export function resolveDesktopBuildIconAssets(
+  version: string,
+  brand?: string,
+): DesktopBuildIconAssets {
+  if (brand === "agents") {
+    return {
+      macIconPng: BRAND_ASSET_PATHS.agentsDesktopIconPng,
+      linuxIconPng: BRAND_ASSET_PATHS.agentsDesktopIconPng,
+      windowsIconIco: BRAND_ASSET_PATHS.agentsWindowsIconIco,
+    };
+  }
   if (resolveDesktopUpdateChannel(version) === "nightly") {
     return {
       macIconPng: BRAND_ASSET_PATHS.nightlyMacIconPng,
@@ -2644,10 +2655,20 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   wslRuntimeBundled = false,
   arch?: typeof BuildArch.Type,
 ) {
+  const appId = yield* Config.string("T3CODE_DESKTOP_APP_ID").pipe(
+    Config.withDefault(DESKTOP_APP_ID),
+  );
+  const productName = yield* Config.string("T3CODE_DESKTOP_PRODUCT_NAME").pipe(
+    Config.withDefault(resolveDesktopProductName(version)),
+  );
+  const brand = yield* Config.string("T3CODE_DESKTOP_BRAND").pipe(Config.withDefault("t3"));
   const buildConfig: Record<string, unknown> = {
-    appId: DESKTOP_APP_ID,
-    productName: resolveDesktopProductName(version),
-    artifactName: "T3-Code-${version}-${arch}.${ext}",
+    appId,
+    productName,
+    artifactName:
+      brand === "agents"
+        ? "T3-Agents-${version}-${arch}.${ext}"
+        : "T3-Code-${version}-${arch}.${ext}",
     electronLanguages: [...DESKTOP_ELECTRON_LANGUAGES],
     files: [
       ...DESKTOP_FILE_EXCLUSIONS,
@@ -2722,7 +2743,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       // Give the themed installer its own Finder volume name. Finder caches
       // DMG window backgrounds by volume name, so reusing a generic name can
       // make a newly built background look unchanged during testing.
-      title: `${resolveDesktopProductName(version)} ${version} Installer`,
+      title: `${productName} ${version} Installer`,
       background: `dmg/dmg-background-${updateChannel}.png`,
       window: {
         width: 640,
@@ -3414,7 +3435,10 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   });
 
   const appVersion = options.version ?? serverPackageJson.version;
-  const iconAssets = resolveDesktopBuildIconAssets(appVersion);
+  const distributionBrand = yield* Config.string("T3CODE_DESKTOP_BRAND").pipe(
+    Config.withDefault("t3"),
+  );
+  const iconAssets = resolveDesktopBuildIconAssets(appVersion, distributionBrand);
   const commitHash = yield* resolveGitCommitHash(repoRoot);
   const mkdir = options.keepStage ? fs.makeTempDirectory : fs.makeTempDirectoryScoped;
   const stageRoot = yield* mkdir({
@@ -3531,7 +3555,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     });
   }
 
-  const webAssetBrand = resolveDesktopWebAssetBrand(appVersion);
+  const webAssetBrand = resolveDesktopWebAssetBrand(appVersion, distributionBrand);
   yield* applyWebBrandAssets(webAssetBrand, "apps/server/dist/client");
   yield* Effect.log(`[desktop-artifact] Applied ${webAssetBrand} web client branding.`);
   yield* validateBundledClientAssets(path.dirname(bundledClientEntry));
@@ -3840,7 +3864,9 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   if (options.platform === "win") {
     yield* validateWindowsPackagedPayload({
       stageDistDir,
-      appExecutableName: `${resolveDesktopProductName(appVersion)}.exe`,
+      appExecutableName: `${yield* Config.string("T3CODE_DESKTOP_PRODUCT_NAME").pipe(
+        Config.withDefault(resolveDesktopProductName(appVersion)),
+      )}.exe`,
       targetArch: options.arch,
       appVersion,
       expectWslRuntime: bundlesWslRuntime({

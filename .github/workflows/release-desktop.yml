@@ -36,6 +36,22 @@ on:
       AZURE_TRUSTED_SIGNING_PUBLISHER_NAME:
         required: false
     inputs:
+      brand:
+        required: false
+        default: t3
+        type: string
+      app_id:
+        required: false
+        default: com.t3tools.t3code
+        type: string
+      product_name:
+        required: false
+        default: ""
+        type: string
+      update_repository:
+        required: false
+        default: ""
+        type: string
       label:
         required: true
         type: string
@@ -122,6 +138,23 @@ jobs:
           git sparse-checkout set --no-cone '/*' '!/.repos/'
           git checkout --detach FETCH_HEAD
 
+      - name: Configure fork distribution
+        shell: bash
+        env:
+          BRAND: ${{ inputs.brand }}
+          APP_ID: ${{ inputs.app_id }}
+          PRODUCT_NAME: ${{ inputs.product_name }}
+          UPDATE_REPOSITORY: ${{ inputs.update_repository }}
+        run: |
+          echo "T3CODE_DESKTOP_BRAND=$BRAND" >> "$GITHUB_ENV"
+          echo "T3CODE_DESKTOP_APP_ID=$APP_ID" >> "$GITHUB_ENV"
+          if [[ -n "$PRODUCT_NAME" ]]; then
+            echo "T3CODE_DESKTOP_PRODUCT_NAME=$PRODUCT_NAME" >> "$GITHUB_ENV"
+          fi
+          if [[ -n "$UPDATE_REPOSITORY" ]]; then
+            echo "T3CODE_DESKTOP_UPDATE_REPOSITORY=$UPDATE_REPOSITORY" >> "$GITHUB_ENV"
+          fi
+
       - name: Setup Vite+
         uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
         with:
@@ -202,6 +235,12 @@ jobs:
       # The artifact root is `apps/` (upload-artifact keeps the least common
       # ancestor of its paths), so extracting into `apps` restores
       # apps/server/dist and apps/desktop/dist-electron at their build paths.
+      - name: Download MCP gateway bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: mcp-gateway-bundle
+          path: packages/mcp-gateway/dist
+
       - name: Download JS bundle
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:

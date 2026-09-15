@@ -369,6 +369,53 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     ),
   );
 
+  it.effect("keeps fork app identity and updates separate from the official distribution", () =>
+    Effect.gen(function* () {
+      const config = yield* createBuildConfig(
+        "mac",
+        "dmg",
+        "0.0.41-nightly.20260915.1001",
+        true,
+        false,
+        undefined,
+        undefined,
+      );
+      assert.equal(config.appId, "com.jayleaton.t3agents");
+      assert.equal(config.productName, "T3 Agents");
+      assert.equal(config.artifactName, "T3-Agents-${version}-${arch}.${ext}");
+      assert.deepStrictEqual(config.publish, [
+        {
+          provider: "github",
+          owner: "jayleaton",
+          repo: "t3code",
+          releaseType: "prerelease",
+          channel: "nightly",
+        },
+      ]);
+      const signing = resolveMacPasskeySigningConfiguration({
+        T3CODE_DESKTOP_APP_ID: "com.jayleaton.t3agents",
+        T3CODE_APPLE_TEAM_ID: "ABC1234567",
+        T3CODE_MACOS_PROVISIONING_PROFILE: "/tmp/fork.provisionprofile",
+        T3CODE_CLERK_PASSKEY_RP_DOMAINS: "clerk.example.com",
+      });
+      assert.include(renderMacPasskeyEntitlements(signing), "ABC1234567.com.jayleaton.t3agents");
+    }).pipe(
+      Effect.provide(
+        ConfigProvider.layer(
+          ConfigProvider.fromEnv({
+            env: {
+              T3CODE_DESKTOP_APP_ID: "com.jayleaton.t3agents",
+              T3CODE_DESKTOP_PRODUCT_NAME: "T3 Agents",
+              T3CODE_DESKTOP_BRAND: "agents",
+              T3CODE_DESKTOP_UPDATE_REPOSITORY: "jayleaton/t3code",
+              GITHUB_REPOSITORY: "pingdotgg/t3code",
+            },
+          }),
+        ),
+      ),
+    ),
+  );
+
   it("stages only the desktop main-process externals", () => {
     assert.deepStrictEqual(
       resolveDesktopRuntimeDependencies(
