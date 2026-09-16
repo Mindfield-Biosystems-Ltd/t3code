@@ -27,6 +27,7 @@ import { useEnvironments } from "../../state/environments";
 import { useThreadShells, useAllEnvironmentShellsBootstrapped } from "../../state/entities";
 import { AgentEditor } from "./AgentEditor";
 import { AgentTaskDialog } from "./AgentTaskDialog";
+import { AgentsLoadingNotice } from "./AgentsLoadingNotice";
 import { groupAgentThreads } from "./agents.logic";
 import { SidebarMenuButton } from "../ui/sidebar";
 import { openCommandPalette } from "../../commandPaletteBus";
@@ -169,11 +170,7 @@ export function AgentsBoard() {
           Connect an environment with agent sync support to create or edit agents.
         </p>
       )}
-      {!ready && (
-        <p role="status" className="agents-notice">
-          Loading connected environments…
-        </p>
-      )}
+      <AgentsLoadingNotice ready={ready} />
       {searching ? (
         <main className="agents-search-results" aria-label="Chat search results">
           <p role="status">
