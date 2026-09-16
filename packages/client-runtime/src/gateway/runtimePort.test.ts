@@ -1,7 +1,10 @@
 import { EnvironmentId, type ServerProvider } from "@t3tools/contracts";
 import { describe, expect, it, vi } from "@effect/vitest";
+import * as Deferred from "effect/Deferred";
+import * as TestClock from "effect/testing/TestClock";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 
@@ -24,6 +27,40 @@ const testCrypto = Crypto.make({
 });
 
 describe("Gateway Runtime Port", () => {
+  for (const operation of ["listProjects", "getThread"] as const) {
+    it.effect(`interrupts an offline ${operation} snapshot after the request deadline`, () =>
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>();
+        let released = false;
+        const registry = EnvironmentRegistry.of({
+          run: () =>
+            Deferred.succeed(started, undefined).pipe(
+              Effect.andThen(Effect.never),
+              Effect.ensuring(
+                Effect.sync(() => {
+                  released = true;
+                }),
+              ),
+            ),
+        } as unknown as EnvironmentRegistry["Service"]);
+        const context = yield* Effect.context<EnvironmentRegistry | Crypto.Crypto>().pipe(
+          Effect.provideService(EnvironmentRegistry, registry),
+          Effect.provideService(Crypto.Crypto, testCrypto),
+        );
+        const port = createGatewayRuntimePortFromContext(context);
+        const request = yield* Effect.tryPromise(async (): Promise<unknown> =>
+          operation === "listProjects"
+            ? port.listProjects(environmentId)
+            : port.getThread(environmentId, "offline-thread"),
+        ).pipe(Effect.exit, Effect.forkChild);
+        yield* Deferred.await(started);
+        yield* TestClock.adjust("21 seconds");
+        const result = yield* Fiber.join(request);
+        expect(result._tag).toBe("Failure");
+        expect(released).toBe(true);
+      }),
+    );
+  }
   it("resolves readable labels only when one live provider/model pair matches", () => {
     const profile = {
       profileId: "profile-andy",
@@ -484,6 +521,39 @@ describe("Gateway Runtime Port", () => {
     expect(projected.artifacts[0]).toMatchObject({ path: "src/index.ts" });
     expect(JSON.stringify(projected)).not.toContain("/home/user/secret");
   });
+
+  for (const operation of ["listProjects", "getThread"] as const) {
+    it.effect(`interrupts an offline ${operation} snapshot subscription at its deadline`, () =>
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>();
+        const released = yield* Deferred.make<void>();
+        const registry = {
+          run: () =>
+            Deferred.succeed(entered, undefined).pipe(
+              Effect.andThen(Effect.never),
+              Effect.ensuring(Deferred.succeed(released, undefined)),
+            ),
+        } as unknown as EnvironmentRegistry["Service"];
+        const port = yield* Effect.context<EnvironmentRegistry | Crypto.Crypto>().pipe(
+          Effect.map(createGatewayRuntimePortFromContext),
+          Effect.provideService(EnvironmentRegistry, registry),
+          Effect.provideService(Crypto.Crypto, testCrypto),
+        );
+        const pending = (
+          operation === "listProjects"
+            ? port.listProjects(environmentId)
+            : port.getThread(environmentId, "thread-1")
+        ).then(
+          () => false,
+          () => true,
+        );
+        yield* Deferred.await(entered);
+        yield* TestClock.adjust("21 seconds");
+        yield* Deferred.await(released);
+        expect(yield* Effect.promise(() => pending)).toBe(true);
+      }),
+    );
+  }
 
   it.effect("projects the existing registry without starting or replacing it", () =>
     Effect.gen(function* () {
