@@ -162,3 +162,27 @@ describe("agent task project selection", () => {
     expect(resolveAgentTaskProject(projects, "linux", "t3code")).toBeUndefined();
   });
 });
+
+describe("agent workspace pull request search", () => {
+  it("finds PR references without matching the title and still applies the agent filter", () => {
+    const linked = {
+      ...thread("Review work", "write"),
+      pullRequests: [
+        {
+          host: "github.com",
+          repository: "owner/repository",
+          number: 42,
+          url: "https://github.com/owner/repository/pull/42",
+          source: "manual" as const,
+          linkedAt: "2026-09-06T00:00:00Z",
+          snapshot: null,
+          stack: null,
+        },
+      ],
+    };
+    expect(selectAgentWorkspaceThreads([linked], null, "owner/repository").active).toEqual([
+      linked,
+    ]);
+    expect(selectAgentWorkspaceThreads([linked], "other", "owner/repository").active).toEqual([]);
+  });
+});

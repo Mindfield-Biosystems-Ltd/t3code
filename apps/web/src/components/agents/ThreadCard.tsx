@@ -142,6 +142,7 @@ export function ThreadCard({
             <div className="agent-thread-location">
               <span className="agent-thread-project">
                 {project?.title ?? "Project unavailable"}
+                {environment && <> · {environment.label}</>}
               </span>
             </div>
           </div>

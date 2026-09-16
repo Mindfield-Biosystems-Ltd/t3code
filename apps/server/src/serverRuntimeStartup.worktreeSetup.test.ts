@@ -89,6 +89,7 @@ const run = (activities: ReadonlyArray<ReturnType<typeof recordedSetup>>) =>
       Effect.provideService(OrchestrationEngine.OrchestrationEngineService, {
         readEvents: () => Stream.empty,
         readThreadEvents: () => Stream.empty,
+        getCommandReceipts: () => Effect.succeed([]),
         getThreadReplayStats: () => Effect.die("unused"),
         dispatch: (command) =>
           Effect.sync(() => {
