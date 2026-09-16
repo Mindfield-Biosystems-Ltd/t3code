@@ -6,7 +6,9 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { EnvironmentId, ProjectId, ThreadId, OrchestrationThreadShell } from "@t3tools/contracts";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 const openPrLink = vi.hoisted(() => vi.fn((event: MouseEvent) => event.preventDefault()));
-vi.mock("../../state/environments", () => ({ useEnvironment: () => ({ connection: { phase: "connected" } }) }));
+vi.mock("../../state/environments", () => ({
+  useEnvironment: () => ({ connection: { phase: "connected" } }),
+}));
 vi.mock("../../state/entities", () => ({ useProject: () => ({ title: "Project" }) }));
 vi.mock("../../lib/openPullRequestLink", () => ({ useOpenPrLink: () => openPrLink }));
 vi.mock("../ThreadStatusIndicators", () => ({

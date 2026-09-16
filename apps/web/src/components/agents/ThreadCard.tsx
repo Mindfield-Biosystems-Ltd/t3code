@@ -49,9 +49,15 @@ export function ThreadCard({
             status: prStatusIndicator(detail?.pr ?? null, detail?.sourceControlProvider),
           };
         })
-      : prReference
-        ? [{ reference: prReference, status: prStatus }]
-        : [];
+      : [thread.linkedPullRequest, thread.branchPullRequest]
+          .filter(
+            (reference, index, references) =>
+              reference != null &&
+              references.findIndex((item) => item?.url === reference.url) === index,
+          )
+          .flatMap((reference) =>
+            reference ? [{ reference, status: reference === prReference ? prStatus : null }] : [],
+          );
   const openPrLink = useOpenPrLink();
   const [previewOpen, setPreviewOpen] = useState(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
@@ -182,20 +188,28 @@ export function ThreadCard({
         <div className="agent-thread-prs" aria-label="Pull requests">
           {badges.map(({ reference, status }) => (
             <Tooltip key={reference.url}>
-            <TooltipTrigger render={<a
-              href={reference.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`agent-thread-pr ${status?.colorClass ?? "text-muted-foreground"}`}
-              aria-label={status?.tooltip ?? `Open PR #${reference.number}`}
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => openPrLink(event, reference.url, undefined, thread.environmentId)}
-            />} >
-              <GitPullRequestIcon size={12} aria-hidden="true" />
-              <span className="agent-thread-pr-repository">{reference.repository}</span>
-              <span>#{reference.number}</span>
-            </TooltipTrigger>
-            <TooltipPopup>{status?.tooltip ?? `${reference.repository} #${reference.number}`}</TooltipPopup>
+              <TooltipTrigger
+                render={
+                  <a
+                    href={reference.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`agent-thread-pr ${status?.colorClass ?? "text-muted-foreground"}`}
+                    aria-label={status?.tooltip ?? `Open PR #${reference.number}`}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) =>
+                      openPrLink(event, reference.url, undefined, thread.environmentId)
+                    }
+                  />
+                }
+              >
+                <GitPullRequestIcon size={12} aria-hidden="true" />
+                <span className="agent-thread-pr-repository">{reference.repository}</span>
+                <span>#{reference.number}</span>
+              </TooltipTrigger>
+              <TooltipPopup>
+                {status?.tooltip ?? `${reference.repository} #${reference.number}`}
+              </TooltipPopup>
             </Tooltip>
           ))}
         </div>

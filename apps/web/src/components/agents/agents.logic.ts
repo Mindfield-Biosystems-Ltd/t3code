@@ -77,7 +77,10 @@ export function selectAgentWorkspaceThreads(
       (thread) =>
         (Boolean(thread.profileSnapshot?.profileId) || (profileId === null && search.length > 0)) &&
         (profileId === null || thread.profileSnapshot?.profileId === profileId) &&
-        (!search || [thread.title, ...threadPullRequestSearchTerms(thread)].some((term) => term.toLocaleLowerCase().includes(search))),
+        (!search ||
+          [thread.title, ...threadPullRequestSearchTerms(thread)].some((term) =>
+            term.toLocaleLowerCase().includes(search),
+          )),
     )
     .toSorted((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return {
