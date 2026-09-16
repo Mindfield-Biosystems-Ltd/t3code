@@ -2781,7 +2781,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       ],
       desktop: {
         entry: {
-          StartupWMClass: "t3code",
+          StartupWMClass: brand === "agents" ? "t3agents" : "t3code",
         },
       },
     };
