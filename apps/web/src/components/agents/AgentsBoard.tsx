@@ -16,7 +16,6 @@ import {
   SettingsIcon,
   PencilIcon,
   Trash2Icon,
-  SquarePenIcon,
   SearchIcon,
   XIcon,
   LayoutGridIcon,
@@ -30,7 +29,8 @@ import { AgentEditor } from "./AgentEditor";
 import { AgentTaskDialog } from "./AgentTaskDialog";
 import { AgentsLoadingNotice } from "./AgentsLoadingNotice";
 import { groupAgentThreads, selectAgentWorkspaceThreads } from "./agents.logic";
-import { SidebarMenuButton } from "../ui/sidebar";
+import { DesktopUpdateButton } from "../sidebar/SidebarUpdatePill";
+import { BrandMark } from "../BrandMark";
 import { openCommandPalette } from "../../commandPaletteBus";
 import { Dialog, DialogPopup, DialogTitle, DialogDescription } from "../ui/dialog";
 
@@ -131,6 +131,7 @@ export function AgentsBoard() {
     <div className="agents-page" data-thread-selected={selected} data-show-filters={showFilters}>
       <header className="agents-topbar">
         <Link to="/" className="agents-brand">
+          <BrandMark className="size-4" />
           <strong>T3</strong>
           <span>/ agents</span>
         </Link>
@@ -158,6 +159,7 @@ export function AgentsBoard() {
           )}
         </div>
         <div className="agents-topbar-actions">
+          <DesktopUpdateButton className="agent-icon-button agent-update-button" />
           <button
             className="agent-icon-button"
             onClick={() => openCommandPalette({ open: "add-project" })}
@@ -167,10 +169,6 @@ export function AgentsBoard() {
           <Link to="/settings" aria-label="Settings" className="agent-icon-button">
             <SettingsIcon size={15} />
           </Link>
-          <button className="agent-primary" disabled={!available} onClick={() => setEditor("new")}>
-            <PlusIcon size={14} />
-            Agent
-          </button>
         </div>
       </header>
       {!available && (
@@ -181,7 +179,17 @@ export function AgentsBoard() {
       <AgentsLoadingNotice ready={ready} />
       <main className="agents-workspace" aria-label="Agents workspace">
         <aside className="agents-filters" aria-label="Agent filters">
-          <h2>Agents</h2>
+          <header className="agents-filters-heading">
+            <h2>Agents</h2>
+            <button
+              className="agent-primary agents-new-agent"
+              disabled={!available}
+              onClick={() => setEditor("new")}
+            >
+              <PlusIcon size={14} />
+              New agent
+            </button>
+          </header>
           <button
             className="agent-filter"
             aria-pressed={filter === null}
@@ -191,8 +199,10 @@ export function AgentsBoard() {
             }}
           >
             <LayoutGridIcon size={22} />
-            <span>All</span>
-            <span>{activeCount(allThreads)}</span>
+            <span className="agent-filter-body">
+              <span className="agent-filter-name">All</span>
+            </span>
+            <span className="agent-filter-count">{activeCount(allThreads)}</span>
           </button>
           {orderedProfiles.map((profile, index) => (
             <div
@@ -218,56 +228,58 @@ export function AgentsBoard() {
                 }}
               >
                 <AgentIcon icon={profile.icon} />
-                <span>{profile.name}</span>
-                <span>{activeCount(groups.get(profile.profileId) ?? [])}</span>
+                <span className="agent-filter-body">
+                  <span className="agent-filter-name">{profile.name}</span>
+                  {profile.description && (
+                    <span className="agent-filter-description">{profile.description}</span>
+                  )}
+                  {(profile.providerLabel || profile.modelLabel) && (
+                    <span className="agent-filter-model">
+                      {profile.providerLabel && profile.modelLabel
+                        ? `${profile.providerLabel} · ${profile.modelLabel}`
+                        : (profile.providerLabel ?? profile.modelLabel)}
+                    </span>
+                  )}
+                </span>
+                <span className="agent-filter-count">
+                  {activeCount(groups.get(profile.profileId) ?? [])}
+                </span>
               </button>
-              <div className="agent-filter-actions">
-                <SidebarMenuButton
-                  size="icon"
-                  type="button"
-                  aria-label={`New chat with ${profile.name}`}
-                  tooltip="New chat"
-                  disabled={profile.runtimeMode === "read-only"}
-                  onClick={() => setTask(profile)}
+              <Menu>
+                <MenuTrigger
+                  className="agent-icon-button"
+                  aria-label={`Options for ${profile.name}`}
                 >
-                  <SquarePenIcon />
-                </SidebarMenuButton>
-                <Menu>
-                  <MenuTrigger
-                    className="agent-icon-button"
-                    aria-label={`Options for ${profile.name}`}
+                  <MoreHorizontalIcon size={14} />
+                </MenuTrigger>
+                <MenuPopup align="end">
+                  <MenuItem disabled={!available} onClick={() => setEditor(profile)}>
+                    <PencilIcon />
+                    Edit agent
+                  </MenuItem>
+                  <MenuItem disabled={index === 0} onClick={() => moveAgent(index, -1)}>
+                    <ArrowLeftIcon />
+                    Move up
+                  </MenuItem>
+                  <MenuItem
+                    disabled={index === orderedProfiles.length - 1}
+                    onClick={() => moveAgent(index, 1)}
                   >
-                    <MoreHorizontalIcon size={14} />
-                  </MenuTrigger>
-                  <MenuPopup align="end">
-                    <MenuItem disabled={!available} onClick={() => setEditor(profile)}>
-                      <PencilIcon />
-                      Edit agent
-                    </MenuItem>
-                    <MenuItem disabled={index === 0} onClick={() => moveAgent(index, -1)}>
-                      <ArrowLeftIcon />
-                      Move up
-                    </MenuItem>
-                    <MenuItem
-                      disabled={index === orderedProfiles.length - 1}
-                      onClick={() => moveAgent(index, 1)}
-                    >
-                      <ArrowRightIcon />
-                      Move down
-                    </MenuItem>
-                    <MenuItem
-                      disabled={!available}
-                      onClick={() => {
-                        setDeleting(profile);
-                        setDeleteError("");
-                      }}
-                    >
-                      <Trash2Icon />
-                      Delete agent
-                    </MenuItem>
-                  </MenuPopup>
-                </Menu>
-              </div>
+                    <ArrowRightIcon />
+                    Move down
+                  </MenuItem>
+                  <MenuItem
+                    disabled={!available}
+                    onClick={() => {
+                      setDeleting(profile);
+                      setDeleteError("");
+                    }}
+                  >
+                    <Trash2Icon />
+                    Delete agent
+                  </MenuItem>
+                </MenuPopup>
+              </Menu>
             </div>
           ))}
           {profiles.length === 0 && (
@@ -282,13 +294,37 @@ export function AgentsBoard() {
             >
               <ArrowLeftIcon size={14} /> Agents
             </button>
-            <h2>
-              Threads
-              {filter !== null
-                ? ` · ${profiles.find((profile) => profile.profileId === filter)?.name ?? "Agent unavailable"}`
-                : ""}
-            </h2>
-            <p>Active & unread</p>
+            <div className="agents-threads-heading">
+              <h2>
+                Threads
+                {filter !== null
+                  ? ` · ${profiles.find((profile) => profile.profileId === filter)?.name ?? "Agent unavailable"}`
+                  : ""}
+              </h2>
+              <p>Active & unread</p>
+            </div>
+            <Menu>
+              <MenuTrigger
+                className="agent-primary agents-new-chat"
+                aria-label="New chat"
+                disabled={!available || orderedProfiles.length === 0}
+              >
+                <PlusIcon size={14} />
+                New chat
+              </MenuTrigger>
+              <MenuPopup align="end" className="agents-new-chat-menu">
+                {orderedProfiles.map((profile) => (
+                  <MenuItem
+                    key={profile.profileId}
+                    disabled={profile.runtimeMode === "read-only"}
+                    onClick={() => setTask(profile)}
+                  >
+                    <AgentIcon icon={profile.icon} />
+                    {profile.name}
+                  </MenuItem>
+                ))}
+              </MenuPopup>
+            </Menu>
           </header>
           {visible.length === 0 && (
             <p role="status" className="agent-empty">

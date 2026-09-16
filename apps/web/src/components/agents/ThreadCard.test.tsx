@@ -26,7 +26,6 @@ vi.mock("../ui/preview-card", () => ({
   PreviewCardPopup: () => null,
 }));
 vi.mock("./AgentChatPreview", () => ({ AgentChatPreview: () => null }));
-vi.mock("./ThreadSpeedControl", () => ({ ThreadSpeedControl: () => null }));
 import { ThreadCard } from "./ThreadCard";
 const container = document.createElement("div");
 document.body.append(container);

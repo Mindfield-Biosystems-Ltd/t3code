@@ -10,7 +10,6 @@ import type { McpGatewayProfile } from "@t3tools/contracts";
 import { AgentIcon } from "./AgentIcon";
 import { useEnvironment } from "../../state/environments";
 import { AgentChatPreview } from "./AgentChatPreview";
-import { ThreadSpeedControl } from "./ThreadSpeedControl";
 import { isInsideComposerFloatingLayer } from "../chat/composerEventScope";
 import { agentThreadStatus, agentThreadStatusLabel } from "./agents.logic";
 import {
@@ -139,12 +138,18 @@ export function ThreadCard({
             </div>
           </div>
           <div className="agent-thread-meta">
-            <div className="agent-thread-location">
-              <span className="agent-thread-project">
-                {project?.title ?? "Project unavailable"}
-                {environment && <> · {environment.label}</>}
-              </span>
-            </div>
+            <span className="agent-thread-project">
+              {project?.title ?? "Project unavailable"}
+              {environment && <> · {environment.label}</>}
+            </span>
+            <time className="agent-thread-time" dateTime={thread.updatedAt}>
+              {new Date(thread.updatedAt).toLocaleString(undefined, {
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            </time>
           </div>
           {environment?.connection.phase !== "connected" && (
             <p className="agent-thread-time">Environment unavailable</p>
@@ -174,17 +179,6 @@ export function ThreadCard({
           )}
         </PreviewCardPopup>
       </PreviewCard>
-      <div className="agent-thread-footer">
-        <time className="agent-thread-time" dateTime={thread.updatedAt}>
-          {new Date(thread.updatedAt).toLocaleString(undefined, {
-            month: "short",
-            day: "numeric",
-            hour: "numeric",
-            minute: "2-digit",
-          })}
-        </time>
-        <ThreadSpeedControl thread={thread} />
-      </div>
       {badges.length > 0 && (
         <div className="agent-thread-prs" aria-label="Pull requests">
           {badges.map(({ reference, status }) => (
