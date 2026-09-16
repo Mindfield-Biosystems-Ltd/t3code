@@ -61,8 +61,8 @@ export function relaunchWithWindowsSharedProfile(): boolean {
     args: process.argv.slice(1),
   });
   if (!args) return false;
-  // On Windows OSCrypt reads Local State before the JS entry point. setPath()
-  // alone changes the browser profile but leaves encryption using the fork's key.
+  // Windows OSCrypt can initialize before asynchronous app services call
+  // setPath(), leaving encryption on the fork's key despite the shared browser path.
   // A startup switch selects the shared key before native initialization as well.
   Electron.app.relaunch({ args });
   Electron.app.exit(0);
