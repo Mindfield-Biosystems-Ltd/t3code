@@ -81,6 +81,8 @@ jobs:
           NODE_ENV: development
         run: vp install --frozen-lockfile
       - name: Validate Agents and packaging
+        env:
+          NODE_ENV: test
         run: |
           vp test run apps/web/src/components/agents packages/client-runtime/src/gateway packages/mcp-gateway/src apps/server/src/mcp/toolkits/workspace scripts/build-desktop-artifact.test.ts
           vp run --filter @t3tools/web --filter @t3tools/desktop --filter @t3tools/client-runtime --filter @t3tools/mcp-gateway --filter t3 typecheck
