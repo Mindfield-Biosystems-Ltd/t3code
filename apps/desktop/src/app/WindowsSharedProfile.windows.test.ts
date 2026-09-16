@@ -40,7 +40,7 @@ it.skipIf(process.platform !== "win32")(
         try{result.sync=safeStorage.decryptString(Buffer.from(data.sync,'base64'))==='fixture';}catch{result.sync=false;}
         try{result.async=(await safeStorage.decryptStringAsync(Buffer.from(data.async,'base64'))).result==='fixture';}catch{result.async=false;}
       }
-      fs.writeFileSync(path.join(root,phase+'.json'),JSON.stringify(result));app.exit(0);
+      fs.writeFileSync(path.join(root,phase+'.json'),JSON.stringify(result));app.quit();
     }).catch(()=>app.exit(1));
   `,
     );
@@ -62,6 +62,9 @@ it.skipIf(process.platform !== "win32")(
     };
     try {
       run("seed", [`--user-data-dir=${original}`]);
+      // A normal quit flushes the newly created native encryption key to Local State.
+      // Verify a same-profile restart before testing the deliberately wrong profile.
+      expect(run("baseline", [`--user-data-dir=${original}`])).toEqual({ sync: true, async: true });
       expect(run("broken", [`--user-data-dir=${fork}`])).toEqual({ sync: false, async: false });
       const args = sharedProfileRelaunchArgs({
         platform: "win32",
