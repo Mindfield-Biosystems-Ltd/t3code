@@ -101,7 +101,7 @@ import {
 } from "../../lib/diffRendering";
 import { PREFERRED_HIGHLIGHTER } from "../../lib/syntaxHighlighting";
 import ChatMarkdown, { ChatMarkdownAssetImage } from "../ChatMarkdown";
-import { T3Wordmark } from "../T3Wordmark";
+import { BrandMark } from "../BrandMark";
 import {
   BotIcon,
   BrainIcon,
@@ -2132,7 +2132,7 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
   return (
     <>
       <div className="relative min-w-0 px-1 py-0.5">
-        <MessageAuthorHeading>T3 Code</MessageAuthorHeading>
+        <MessageAuthorHeading>T3 Agents</MessageAuthorHeading>
         <AssistantCitationSource
           messageId={row.message.id}
           {...(ctx.threadRef ? { threadRef: ctx.threadRef } : {})}
@@ -3889,7 +3889,7 @@ function WorkEntryIcon({ name, className }: { name: WorkEntryIconName; className
     case "device":
       return <SmartphoneIcon className={className} aria-hidden />;
     case "t3-code":
-      return <T3Wordmark className={className} aria-hidden />;
+      return <BrandMark className={className} />;
     case "check":
       return <CheckIcon className={className} aria-hidden />;
     case "circle-alert":
