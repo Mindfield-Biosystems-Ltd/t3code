@@ -76,7 +76,10 @@ jobs:
         with:
           node-version-file: package.json
           run-install: false
-      - run: vp install --frozen-lockfile --prod=false
+      - name: Install build dependencies
+        env:
+          NODE_ENV: development
+        run: vp install --frozen-lockfile
       - name: Validate Agents and packaging
         run: |
           vp test run apps/web/src/components/agents packages/client-runtime/src/gateway packages/mcp-gateway/src apps/server/src/mcp/toolkits/workspace scripts/build-desktop-artifact.test.ts
