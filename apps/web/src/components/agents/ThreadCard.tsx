@@ -1,21 +1,25 @@
+import { GitPullRequestIcon } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
-import { useState, useRef, type CSSProperties } from "react";
+import { useState, useRef, useEffect, type CSSProperties } from "react";
 import { Link, useLocation } from "@tanstack/react-router";
 import { PreviewCard, PreviewCardTrigger, PreviewCardPopup } from "../ui/preview-card";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { useProject } from "../../state/entities";
-import type { McpGatewayProfile, EnvironmentId, ThreadLinkedPullRequest } from "@t3tools/contracts";
+import type { McpGatewayProfile } from "@t3tools/contracts";
 import { AgentIcon } from "./AgentIcon";
 import { useEnvironment } from "../../state/environments";
-import {
-  useLinkedThreadPullRequest,
-  ChangeRequestStatusIcon,
-  prStatusIndicator,
-} from "../ThreadStatusIndicators";
 import { AgentChatPreview } from "./AgentChatPreview";
 import { ThreadSpeedControl } from "./ThreadSpeedControl";
+import { isInsideComposerFloatingLayer } from "../chat/composerEventScope";
 import { agentThreadStatus, agentThreadStatusLabel } from "./agents.logic";
+import {
+  useLinkedThreadPullRequest,
+  prStatusIndicator,
+  linkedPullRequestSnapshotStatus,
+} from "../ThreadStatusIndicators";
+import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
+import { useOpenPrLink } from "../../lib/openPullRequestLink";
 
 export function ThreadCard({
   thread,
@@ -31,14 +35,47 @@ export function ThreadCard({
 }) {
   const pathname = useLocation({ select: (location) => location.pathname });
   const environment = useEnvironment(thread.environmentId);
-  const prs = [thread.linkedPullRequest, thread.branchPullRequest].filter(
-    (pr, index, items) => pr != null && items.findIndex((item) => item?.url === pr.url) === index,
-  );
   const project = useProject(scopeProjectRef(thread.environmentId, thread.projectId));
+  const prReference = thread.linkedPullRequest ?? thread.branchPullRequest;
+  const linkedPr = useLinkedThreadPullRequest(thread.environmentId, prReference);
+  const prStatus = prStatusIndicator(linkedPr?.pr ?? null, linkedPr?.sourceControlProvider);
+  const links = visibleThreadPullRequests(thread.pullRequests ?? []);
+  const badges =
+    links.length > 0
+      ? links.map((link) => {
+          const detail = linkedPullRequestSnapshotStatus(link);
+          return {
+            reference: link,
+            status: prStatusIndicator(detail?.pr ?? null, detail?.sourceControlProvider),
+          };
+        })
+      : prReference
+        ? [{ reference: prReference, status: prStatus }]
+        : [];
+  const openPrLink = useOpenPrLink();
   const [previewOpen, setPreviewOpen] = useState(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const status = agentThreadStatus(thread);
   const popupRef = useRef<HTMLDivElement>(null);
+  const editing = useRef(false);
+  const closePreview = () => {
+    editing.current = false;
+    setPreviewOpen(false);
+  };
+  useEffect(() => {
+    if (!previewOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (
+        popupRef.current?.contains(event.target as Node) ||
+        isInsideComposerFloatingLayer(event.target)
+      )
+        return;
+      editing.current = false;
+      setPreviewOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [previewOpen]);
   return (
     <div
       className="agent-thread-container"
@@ -51,9 +88,12 @@ export function ThreadCard({
           if (
             !open &&
             details.reason === "trigger-hover" &&
-            popupRef.current?.contains(document.activeElement)
+            (editing.current ||
+              popupRef.current?.contains(document.activeElement) ||
+              isInsideComposerFloatingLayer(document.activeElement))
           )
             return;
+          if (!open) editing.current = false;
           setPreviewOpen(open);
         }}
       >
@@ -102,65 +142,64 @@ export function ThreadCard({
           {environment?.connection.phase !== "connected" && (
             <p className="agent-thread-time">Environment unavailable</p>
           )}
-          <time className="agent-thread-time" dateTime={thread.updatedAt}>
-            {new Date(thread.updatedAt).toLocaleString(undefined, {
-              month: "short",
-              day: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-            })}
-          </time>
         </PreviewCardTrigger>
         <PreviewCardPopup
           ref={popupRef}
+          onPointerDownCapture={() => {
+            editing.current = true;
+          }}
+          onFocusCapture={() => {
+            editing.current = true;
+          }}
           side="right"
           align="start"
           sideOffset={12}
+          // Composer menus and dialogs portal above this interactive preview.
+          positionerClassName="z-[120]"
           className="agent-chat-preview bg-background text-foreground"
         >
           {previewOpen && (
-            <AgentChatPreview thread={thread} project={project?.title ?? "Project unavailable"} />
+            <AgentChatPreview
+              thread={thread}
+              project={project?.title ?? "Project unavailable"}
+              onClose={closePreview}
+            />
           )}
         </PreviewCardPopup>
       </PreviewCard>
-      {prs.length > 0 && (
-        <div className="agent-thread-prs">
-          {prs.map(
-            (pr) =>
-              pr && <AgentThreadPr key={pr.url} environmentId={thread.environmentId} pr={pr} />,
-          )}
+      <div className="agent-thread-footer">
+        <time className="agent-thread-time" dateTime={thread.updatedAt}>
+          {new Date(thread.updatedAt).toLocaleString(undefined, {
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          })}
+        </time>
+        <ThreadSpeedControl thread={thread} />
+      </div>
+      {badges.length > 0 && (
+        <div className="agent-thread-prs" aria-label="Pull requests">
+          {badges.map(({ reference, status }) => (
+            <Tooltip key={reference.url}>
+            <TooltipTrigger render={<a
+              href={reference.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`agent-thread-pr ${status?.colorClass ?? "text-muted-foreground"}`}
+              aria-label={status?.tooltip ?? `Open PR #${reference.number}`}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => openPrLink(event, reference.url, undefined, thread.environmentId)}
+            />} >
+              <GitPullRequestIcon size={12} aria-hidden="true" />
+              <span className="agent-thread-pr-repository">{reference.repository}</span>
+              <span>#{reference.number}</span>
+            </TooltipTrigger>
+            <TooltipPopup>{status?.tooltip ?? `${reference.repository} #${reference.number}`}</TooltipPopup>
+            </Tooltip>
+          ))}
         </div>
       )}
-      <ThreadSpeedControl thread={thread} />
     </div>
-  );
-}
-
-function AgentThreadPr({
-  environmentId,
-  pr,
-}: {
-  environmentId: EnvironmentId;
-  pr: ThreadLinkedPullRequest;
-}) {
-  const linked = useLinkedThreadPullRequest(environmentId, pr);
-  const status = prStatusIndicator(linked?.pr ?? null, linked?.sourceControlProvider);
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={<a href={pr.url} target="_blank" rel="noreferrer" className={status?.colorClass} />}
-      >
-        <ChangeRequestStatusIcon
-          state={linked?.pr.state ?? "open"}
-          isDraft={linked?.pr.isDraft}
-          className="size-3 shrink-0"
-        />
-        <span>
-          {pr.repository} #{pr.number}
-        </span>
-        {status && <span>{status.label}</span>}
-      </TooltipTrigger>
-      <TooltipPopup>{status?.tooltip ?? pr.url}</TooltipPopup>
-    </Tooltip>
   );
 }

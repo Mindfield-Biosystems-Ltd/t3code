@@ -8,10 +8,11 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
   useLocation: ({ select }: { select: (value: { pathname: string }) => unknown }) => select(route),
   useNavigate: () => route.navigate,
-  useParams: () => null,
+  useParams: () => ({}),
   createFileRoute: () => (options: unknown) => options,
   Link: ({ to, children }: { to: string; children: ReactNode }) => <a href={to}>{children}</a>,
 }));
+vi.mock("./AgentChatRail", () => ({ AgentChatRail: () => <nav>Agent chats</nav> }));
 vi.mock("./AgentHandoffDialog", () => ({ AgentHandoffDialog: () => <div>Handoff dialog</div> }));
 vi.mock("@effect/atom-react", () => ({ useAtomValue: () => [] }));
 vi.mock("../../state/server", () => ({ primaryServerKeybindingsAtom: {} }));
@@ -41,10 +42,11 @@ vi.mock("../settings/SettingsSidebarNav", () => ({
 }));
 vi.mock("../sidebar/SidebarChrome", () => ({ SidebarChromeHeader: () => null }));
 vi.mock("../ChatView", () => ({
-  default: () => {
+  default: ({ showBackToAgents }: { showBackToAgents?: boolean }) => {
     const sidebar = useSidebar();
     return (
       <div>
+        {showBackToAgents && <a href="/agents">Back to agents</a>}
         <label>
           Message
           <textarea />

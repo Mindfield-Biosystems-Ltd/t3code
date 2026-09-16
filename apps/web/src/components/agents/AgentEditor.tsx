@@ -1,3 +1,4 @@
+import { agentModelOptions } from "./agentModelCatalog";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 import type { McpGatewayProfile, ServerProvider } from "@t3tools/contracts";
 import { MCP_GATEWAY_RUNTIME_MODE_LABELS } from "@t3tools/contracts";
@@ -16,7 +17,7 @@ export function AgentEditor({
 }: {
   profile: McpGatewayProfile | null;
   profiles: ReadonlyArray<McpGatewayProfile>;
-  providers: ReadonlyArray<ServerProvider>;
+  providers: ReadonlyArray<ServerProvider & { readonly environmentId: string }>;
   machines: ReadonlyArray<{ environmentId: string; label: string }>;
   onSave: (profile: McpGatewayProfile) => Promise<boolean | undefined>;
   onClose: () => void;
@@ -34,6 +35,7 @@ export function AgentEditor({
       ]!,
   );
   const [icon, setIcon] = useState<NonNullable<McpGatewayProfile["icon"]>>(profile?.icon ?? "orb");
+  const [description, setDescription] = useState(profile?.description ?? "");
   const [name, setName] = useState(profile?.name ?? "");
   const [providerLabel, setProviderLabel] = useState(profile?.providerLabel ?? "");
   const [modelLabel, setModelLabel] = useState(profile?.modelLabel ?? "");
@@ -49,16 +51,20 @@ export function AgentEditor({
   );
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const availableProviders = providers.filter(
+    (provider) => environmentIds.length === 0 || environmentIds.includes(provider.environmentId),
+  );
   const providerLabels = [
-    ...new Set(providers.filter((p) => p.enabled).map((p) => p.displayName?.trim() || p.driver)),
-  ];
-  const models = [
     ...new Set(
-      providers
-        .filter((p) => (p.displayName?.trim() || p.driver) === providerLabel)
-        .flatMap((p) => p.models.map((m) => m.name)),
+      availableProviders.filter((p) => p.enabled).map((p) => p.displayName?.trim() || p.driver),
     ),
   ];
+  const models = agentModelOptions(providers, environmentIds, providerLabel);
+  const selectedModel =
+    models.find((model) => model.slug === modelLabel) ??
+    (models.filter((model) => model.name === modelLabel).length === 1
+      ? models.find((model) => model.name === modelLabel)
+      : undefined);
   return (
     <Dialog
       open
@@ -89,12 +95,13 @@ export function AgentEditor({
               const saved = await onSave({
                 profileId: profile?.profileId ?? randomUUID(),
                 name: name.trim(),
+                description: description.trim(),
                 systemPrompt,
                 color,
                 icon,
                 revision: profile?.revision ?? 1,
                 providerLabel,
-                modelLabel,
+                modelLabel: selectedModel?.slug ?? modelLabel,
                 ...(thinking.trim() ? { reasoningEffort: thinking.trim() } : {}),
                 runtimeMode,
                 interactionMode,
@@ -121,6 +128,18 @@ export function AgentEditor({
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
+          </label>
+          <label>
+            Specialization
+            <input
+              maxLength={280}
+              placeholder="Reviews code for correctness, security, and maintainability"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+            />
+            <span className="text-xs text-muted-foreground">
+              A short description shown on the board and in MCP.
+            </span>
           </label>
           <fieldset
             className="agent-appearance"
@@ -201,10 +220,21 @@ export function AgentEditor({
             </label>
             <label>
               Model
-              <select required value={modelLabel} onChange={(e) => setModelLabel(e.target.value)}>
+              <select
+                required
+                value={selectedModel?.slug ?? modelLabel}
+                onChange={(e) => setModelLabel(e.target.value)}
+              >
                 <option value="">Select model</option>
-                {[...new Set([...models, ...(modelLabel ? [modelLabel] : [])])].map((label) => (
-                  <option key={label}>{label}</option>
+                {modelLabel && !selectedModel && (
+                  <option value={modelLabel} disabled>
+                    {modelLabel} — unavailable; select a model
+                  </option>
+                )}
+                {models.map((model) => (
+                  <option key={model.slug} value={model.slug}>
+                    {model.name} ({model.slug})
+                  </option>
                 ))}
               </select>
             </label>
@@ -288,7 +318,7 @@ export function AgentEditor({
             </button>
             <button
               className="agent-primary"
-              disabled={saving || !name.trim() || !providerLabel || !modelLabel}
+              disabled={saving || !name.trim() || !providerLabel || !selectedModel}
             >
               {saving ? "Saving…" : profile ? "Save agent" : "Create agent"}
             </button>

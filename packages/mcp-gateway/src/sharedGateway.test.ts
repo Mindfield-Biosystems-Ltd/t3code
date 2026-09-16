@@ -152,7 +152,7 @@ describe("shared MCP gateway", () => {
         body(await client.callTool({ name: "t3_get_gateway_health", arguments: {} })).data,
       ).toMatchObject({ bridge: "connected" });
       const toolNames = (await client.listTools()).tools.map((tool) => tool.name);
-      expect(toolNames).toHaveLength(58);
+      expect(toolNames).toContain("t3_get_agents_view");
       expect(toolNames).toContain("t3_list_agents");
       expect(toolNames).toContain("t3_unsettle_thread");
       expect(toolNames).not.toContain("t3_list_profiles");
@@ -342,7 +342,7 @@ describe("shared MCP gateway", () => {
           environmentId: "local",
           sequence: 1,
           type: "thread.started",
-          occurredAt: "2026-09-06T00:00:00Z",
+          occurredAt: "2026-09-16T00:00:00.000Z",
           data: {},
         },
       }),

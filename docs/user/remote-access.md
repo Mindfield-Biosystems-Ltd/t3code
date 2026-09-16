@@ -21,8 +21,9 @@ server with `npx t3 serve`. Saving your sign-in alone does not make the machine
 reachable.
 
 On your other device, sign in to the same T3 Connect account and choose the
-environment. Over SSH, the CLI prints a browser link and accepts the returned
-authorization code, so you do not need to forward an OAuth callback port.
+environment. Over SSH, the CLI prints a browser link and a short code. Open the
+link on any device, confirm the code matches, and approve. The CLI continues on
+its own, so you do not need to forward an OAuth callback port.
 
 T3 Connect renews access credentials when needed without disconnecting a healthy
 connection. Pull request diffs and provider settings keep working after the
@@ -65,7 +66,8 @@ another link to share.
 
 Auto balance is off by default. On web and desktop, enable it in
 **Settings → Connections → Load balancing** to automatically choose a machine for
-new threads in projects grouped across connected environments.
+new threads in projects grouped across connected environments. The section
+appears once two or more machines are switched on.
 Each machine starts at **Normal**. Choose **Prefer** to favor it when it has CPU and
 memory available, **Less often** to reduce its share, or **Manual only** to exclude
 it from automatic selection. These are preferences, not fixed traffic percentages.
@@ -253,11 +255,12 @@ the agent library between connected environments that support agent sync, includ
 ambiguous selection must be re-selected before starting a thread. Agent changes apply only to
 new chats.
 
+Add a short **Specialization** when creating or editing an agent to show what it does beneath its name and in MCP. This description does not replace its instructions.
+
 MCP assistants can discover agents with read access using `t3_list_agents`, or manage them using `t3_create_agent`, `t3_update_agent`, and `t3_delete_agent` with create
 or admin access. Agent writes share only to connected environments with one of those grants;
 check the returned sync failures. Use `profileId` with `t3_create_thread` to snapshot an agent’s instructions and settings,
-then `t3_send_message` to start work. Filter `t3_list_threads` by the same ID and `state`
-(`active`, `settled`, or `all`) to find ongoing or completed work. Use `t3_unsettle_thread`
+then `t3_send_message` to start work. The environment-local `/mcp/workspace` endpoint exposes `list_agents` and `get_agents_view` with the same profile and state filters, using runs from its hosting machine. Agent listings include specializations without exposing system prompts. Use `t3_get_agents_view` with an `environmentId` to list agents alongside their chats and run status. Filter by `profileId` and `state` (`active`, `settled`, or `all`); active is the default and includes completed chats that have not been settled. Chats belonging to deleted agents appear under `orphanedRuns`. Use `t3_unsettle_thread`
 with lifecycle access to return a settled chat to the active list. `t3_open_agents` opens the
 board in the connected desktop window with read access.
 
@@ -281,3 +284,14 @@ retrying, and inspect the returned status: `created` means the new chat exists b
 recovery. Settlement is a separate `t3_settle_thread` call after the user confirms. Handoff needs
 read access on the source, artifact access when copying files, and create/send/artifact access on
 the destination; settlement needs lifecycle access.
+
+## Using the Desktop App as a Remote Only
+
+If a computer should only drive work running elsewhere, turn off its local environment. In the
+desktop app, open **Settings → Connections** and switch off **Local
+environment**. T3 Code restarts without a local server: no local agents or terminals run, WSL
+backends stay off, and other devices can no longer connect to this computer. Your projects,
+history, and saved connections are kept, and you keep working through pairing, T3 Connect, or SSH.
+
+Switch **Local environment** back on in the same place to restart with your previous local
+settings.

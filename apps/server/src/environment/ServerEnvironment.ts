@@ -12,7 +12,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
-import packageJson from "../../package.json" with { type: "json" };
+import { serverBuildVersion } from "../buildVersion.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import { readAgentActivityPublishingActive } from "../cloud/config.ts";
 import { resolveServerSelfUpdateCapability } from "../cloud/selfUpdate.ts";
@@ -211,7 +211,7 @@ export const make = Effect.gen(function* () {
       arch: platformArch(hostArchitecture),
       ...(machine === null ? {} : { machine }),
     },
-    serverVersion: packageJson.version,
+    serverVersion: serverBuildVersion,
     capabilities: {
       repositoryIdentity: true,
       connectionProbe: true,
@@ -219,10 +219,13 @@ export const make = Effect.gen(function* () {
       questionAttachments: true,
       fileAttachments: { maxUploadBytes: PROVIDER_SEND_TURN_MAX_FILE_BYTES },
       pullRequests: true,
+      inlineMessageContext: true,
       threadSettlement: true,
       threadAutoSettlement: true,
       agentLibrarySync: true,
+      agentThreadBootstrap: true,
       threadRestartContinuation: true,
+      projectSettingsOverrides: true,
       threadSnooze: true,
       environmentThemes: true,
       usageLimitSources: true,
@@ -231,8 +234,11 @@ export const make = Effect.gen(function* () {
       threadPinReorder: true,
       threadActiveReorder: true,
       threadTitleRegeneration: true,
+      threadPullRequests: true,
+      pullRequestStackActions: true,
       threadPullRequestLinking: true,
       environmentIcon: true,
+      projectCloneTracking: true,
       ...(serverSelfUpdate === null ? {} : { serverSelfUpdate }),
       ...(serverSelfUpdate === "boot-service" || desktopAppUpdate
         ? {

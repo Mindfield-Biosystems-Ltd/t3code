@@ -1,3 +1,5 @@
+import { useClientSettings } from "../../hooks/useSettings";
+import { visibleAgentProviders } from "./agentModelCatalog";
 import { ThreadCard } from "./ThreadCard";
 import { useAgentThreadContextMenu } from "./useAgentThreadContextMenu";
 import * as Schema from "effect/Schema";
@@ -26,6 +28,7 @@ import { useEnvironments } from "../../state/environments";
 import { useThreadShells, useAllEnvironmentShellsBootstrapped } from "../../state/entities";
 import { AgentEditor } from "./AgentEditor";
 import { AgentTaskDialog } from "./AgentTaskDialog";
+import { AgentsLoadingNotice } from "./AgentsLoadingNotice";
 import { groupAgentThreads, selectAgentWorkspaceThreads } from "./agents.logic";
 import { SidebarMenuButton } from "../ui/sidebar";
 import { openCommandPalette } from "../../commandPaletteBus";
@@ -97,6 +100,7 @@ export function AgentsBoard() {
     setOrder(ids);
   };
   const { environments } = useEnvironments();
+  const modelPreferences = useClientSettings((settings) => settings.providerModelPreferences);
   const threads = useThreadShells();
   const ready = useAllEnvironmentShellsBootstrapped();
   const [editor, setEditor] = useState<McpGatewayProfile | "new" | null>(null);
@@ -174,11 +178,7 @@ export function AgentsBoard() {
           Connect an environment with agent sync support to create or edit agents.
         </p>
       )}
-      {!ready && (
-        <p role="status" className="agents-notice">
-          Loading connected environments…
-        </p>
-      )}
+      <AgentsLoadingNotice ready={ready} />
       <main className="agents-workspace" aria-label="Agents workspace">
         <aside className="agents-filters" aria-label="Agent filters">
           <h2>Agents</h2>
@@ -309,7 +309,13 @@ export function AgentsBoard() {
         <AgentEditor
           profile={editor === "new" ? null : editor}
           profiles={profiles}
-          providers={online.flatMap((env) => env.serverConfig?.providers ?? [])}
+          providers={online.flatMap((env) =>
+            env.serverConfig
+              ? visibleAgentProviders(env.environmentId, env.serverConfig.providers, {
+                  providerModelPreferences: modelPreferences,
+                })
+              : [],
+          )}
           machines={environments}
           onClose={() => setEditor(null)}
           onSave={(profile) =>
@@ -333,7 +339,7 @@ export function AgentsBoard() {
           <DialogPopup className="agent-dialog p-6">
             <DialogTitle>Delete {deleting.name}?</DialogTitle>
             <DialogDescription className="mt-2 text-sm text-muted-foreground">
-              Existing threads will remain under Removed agents. This does not stop running work.
+              Existing threads will remain visible in All. This does not stop running work.
             </DialogDescription>
             {deleteError && <p role="alert">{deleteError}</p>}
             <div className="agent-form">

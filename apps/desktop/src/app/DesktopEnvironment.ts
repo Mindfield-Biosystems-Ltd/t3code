@@ -13,11 +13,20 @@ import * as Path from "effect/Path";
 
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopConfig from "./DesktopConfig.ts";
-import { resolveLinuxDesktopEntryName } from "./DesktopEarlyElectronStartup.ts";
+import {
+  resolveLinuxDesktopEntryName,
+  resolveLinuxWmClass,
+} from "./DesktopEarlyElectronStartup.ts";
 import { resolveDesktopBaseDir, resolveDesktopStateDir } from "./DesktopStatePaths.ts";
 import { isNightlyDesktopVersion } from "../updates/updateChannels.ts";
+import type { OtlpProtocol } from "@t3tools/shared/observability";
+
+declare const __T3CODE_DESKTOP_BRAND__: string | undefined;
+const desktopBrand =
+  typeof __T3CODE_DESKTOP_BRAND__ === "undefined" ? "t3" : __T3CODE_DESKTOP_BRAND__;
 
 export interface MakeDesktopEnvironmentInput {
+  readonly brand?: string;
   readonly dirname: string;
   readonly homeDirectory: string;
   readonly platform: NodeJS.Platform;
@@ -61,6 +70,8 @@ export class DesktopEnvironment extends Context.Service<
     // extracts on demand (see DesktopWslServerTree).
     readonly serverRoot: string;
     readonly backendEntryPath: string;
+    // Built web client the packaged renderer is served from over t3code://app.
+    readonly clientAssetsDir: string;
     readonly backendCwd: string;
     readonly preloadPath: string;
     readonly appUpdateYmlPath: string;
@@ -70,6 +81,8 @@ export class DesktopEnvironment extends Context.Service<
     readonly commitHashOverride: Option.Option<string>;
     readonly otlpTracesUrl: Option.Option<string>;
     readonly otlpExportIntervalMs: number;
+    readonly otlpHeaders: Option.Option<Record<string, string>>;
+    readonly otlpProtocol: OtlpProtocol;
     readonly branding: DesktopAppBranding;
     readonly displayName: string;
     readonly appUserModelId: string;
@@ -102,12 +115,14 @@ function resolveDesktopAppStageLabel(input: {
 export function resolveDesktopAppBranding(input: {
   readonly isDevelopment: boolean;
   readonly appVersion: string;
+  readonly brand?: string;
 }): DesktopAppBranding {
   const stageLabel = resolveDesktopAppStageLabel(input);
+  const baseName = (input.brand ?? desktopBrand) === "agents" ? "T3 Agents" : APP_BASE_NAME;
   return {
-    baseName: APP_BASE_NAME,
+    baseName,
     stageLabel,
-    displayName: `${APP_BASE_NAME} (${stageLabel})`,
+    displayName: `${baseName} (${stageLabel})`,
   };
 }
 
@@ -171,6 +186,7 @@ const make = Effect.fn("desktop.environment.make")(function* (
   const branding = resolveDesktopAppBranding({
     isDevelopment,
     appVersion: input.appVersion,
+    brand: input.brand ?? desktopBrand,
   });
   const displayName = branding.displayName;
   const stateDir = resolveDesktopStateDir({
@@ -211,6 +227,7 @@ const make = Effect.fn("desktop.environment.make")(function* (
     appRoot,
     serverRoot,
     backendEntryPath: path.join(serverRoot, "apps/server/dist/bin.mjs"),
+    clientAssetsDir: path.join(serverRoot, "apps/server/dist/client"),
     backendCwd: input.isPackaged ? homeDirectory : appRoot,
     preloadPath: path.join(input.dirname, "preload.cjs"),
     appUpdateYmlPath: input.isPackaged
@@ -222,13 +239,21 @@ const make = Effect.fn("desktop.environment.make")(function* (
     commitHashOverride: config.commitHashOverride,
     otlpTracesUrl: config.otlpTracesUrl,
     otlpExportIntervalMs: config.otlpExportIntervalMs,
+    otlpHeaders: config.otlpHeaders,
+    otlpProtocol: config.otlpProtocol,
     branding,
     displayName,
     appUserModelId: Option.getOrElse(config.appUserModelIdOverride, () =>
-      isDevelopment ? "com.t3tools.t3code.dev" : "com.t3tools.t3code",
+      (input.brand ?? desktopBrand) === "agents"
+        ? isDevelopment
+          ? "com.jayleaton.t3agents.dev"
+          : "com.jayleaton.t3agents"
+        : isDevelopment
+          ? "com.t3tools.t3code.dev"
+          : "com.t3tools.t3code",
     ),
-    linuxDesktopEntryName: resolveLinuxDesktopEntryName(isDevelopment),
-    linuxWmClass: isDevelopment ? "t3code-dev" : "t3code",
+    linuxDesktopEntryName: resolveLinuxDesktopEntryName(isDevelopment, input.brand ?? desktopBrand),
+    linuxWmClass: resolveLinuxWmClass(isDevelopment, input.brand ?? desktopBrand),
     linuxApplicationsDir,
     appImagePath: config.appImagePath,
     userDataDirName,

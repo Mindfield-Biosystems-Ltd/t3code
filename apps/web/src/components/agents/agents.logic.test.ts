@@ -10,6 +10,7 @@ import {
   groupAgentThreads,
   isAgentChatInFocus,
   selectAgentWorkspaceThreads,
+  resolveAgentTaskProject,
 } from "./agents.logic";
 const profile: McpGatewayProfile = {
   profileId: "write",
@@ -141,5 +142,23 @@ describe("agent workspace selection", () => {
     expect(selectAgentWorkspaceThreads(items, "write", "remote").active).toEqual([]);
     expect(selectAgentWorkspaceThreads(items, null, "ordinary").active).toEqual([items[3]]);
     expect(selectAgentWorkspaceThreads([], null, "")).toEqual({ active: [], settled: [] });
+  });
+});
+
+describe("agent task project selection", () => {
+  const projects = [
+    { environmentId: "mac", id: "buildthings", workspaceRoot: "/Users/jay/buildthings" },
+    { environmentId: "windows", id: "t3code", workspaceRoot: "C:\\projects\\t3code" },
+    { environmentId: "mac", id: "t3code", workspaceRoot: "/Users/jay/t3code" },
+  ];
+  it("binds a selected project to its machine even when another machine has the same project id", () => {
+    expect(resolveAgentTaskProject(projects, "mac", "t3code")).toBe(projects[2]);
+    expect(resolveAgentTaskProject(projects.toReversed(), "mac", "t3code")).toBe(projects[2]);
+  });
+  it("does not substitute a recent project for an empty, removed, or foreign selection", () => {
+    expect(resolveAgentTaskProject(projects, "mac", "")).toBeUndefined();
+    expect(resolveAgentTaskProject(projects.slice(0, 2), "mac", "t3code")).toBeUndefined();
+    expect(resolveAgentTaskProject(projects, "windows", "buildthings")).toBeUndefined();
+    expect(resolveAgentTaskProject(projects, "linux", "t3code")).toBeUndefined();
   });
 });

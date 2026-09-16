@@ -6,7 +6,7 @@ import { Argument, Command } from "effect/unstable/cli";
 import * as CliError from "effect/unstable/cli/CliError";
 
 import * as NetService from "@t3tools/shared/Net";
-import packageJson from "../package.json" with { type: "json" };
+import { serverBuildVersion } from "./buildVersion.ts";
 import { authCommand } from "./cli/auth.ts";
 import { appCommand } from "./cli/app.ts";
 import { connectCommand } from "./cli/connect.ts";
@@ -17,7 +17,12 @@ import { isEntrypoint } from "./entrypoint.ts";
 import { projectCommand } from "./cli/project.ts";
 import { runServerCommand, serveCommand, startCommand } from "./cli/server.ts";
 import { serviceCommand } from "./cli/service.ts";
+import { uninstallCommand } from "./cli/uninstall.ts";
+import { updateCommand } from "./cli/update.ts";
+import { claudeHistoryCommand } from "./cli/claudeHistory.ts";
+import { serviceLauncherCommand } from "./cli/serviceLauncher.ts";
 import { servicePreflightCommand } from "./cli/servicePreflight.ts";
+import { sshHelperCommand } from "./cli/sshHelper.ts";
 import { themeCommand } from "./cli/theme.ts";
 import { triageCommand } from "./cli/triage.ts";
 
@@ -59,7 +64,12 @@ export const makeCli = ({ cloudEnabled = hasCloudPublicConfig } = {}) =>
       authCommand,
       projectCommand,
       serviceCommand,
+      updateCommand,
+      uninstallCommand,
+      serviceLauncherCommand,
+      claudeHistoryCommand,
       servicePreflightCommand,
+      sshHelperCommand,
       themeCommand,
       triageCommand,
       cloudEnabled ? connectCommand : connectUnavailableCommand,
@@ -75,7 +85,7 @@ if (
     runtimeMain: import.meta.main,
   })
 ) {
-  Command.run(cli, { version: packageJson.version }).pipe(
+  Command.run(cli, { version: serverBuildVersion }).pipe(
     Effect.scoped,
     Effect.provide(CliRuntimeLayer),
     NodeRuntime.runMain,

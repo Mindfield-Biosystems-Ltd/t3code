@@ -4,7 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { useProject, useThreadDetail, useThreadStatus } from "../../state/entities";
-import { deriveDisplayedUserMessageState } from "../../lib/terminalContext";
+import { stripInlineContextReferences } from "../../lib/composerContextReferences";
 import ChatMarkdown from "../ChatMarkdown";
 import { shouldPreserveAssistantLineBreaks } from "../chat/MessagesTimeline.logic";
 import { agentThreadStatus, agentThreadStatusLabel } from "./agents.logic";
@@ -12,9 +12,11 @@ import { agentThreadStatus, agentThreadStatusLabel } from "./agents.logic";
 export function AgentChatPreview({
   thread,
   project,
+  onClose,
 }: {
   thread: EnvironmentThreadShell;
   project: string;
+  onClose: () => void;
 }) {
   const ref = scopeThreadRef(thread.environmentId, thread.id);
   const detail = useThreadDetail(ref);
@@ -41,7 +43,12 @@ export function AgentChatPreview({
   return (
     <section aria-label="Chat preview" className="agent-preview-chat">
       <header className="agent-preview-header">
-        <strong>{thread.title}</strong>
+        <div className="flex items-start justify-between gap-2">
+          <strong>{thread.title}</strong>
+          <button type="button" aria-label="Close chat preview" onClick={onClose}>
+            ×
+          </button>
+        </div>
         <span>
           {project} · {agentThreadStatusLabel(agentThreadStatus(thread))}
         </span>
@@ -69,9 +76,7 @@ export function AgentChatPreview({
           )}
           {messages.map((message) => {
             const user = message.role === "user";
-            const text = user
-              ? deriveDisplayedUserMessageState(message.text).visibleText
-              : message.text;
+            const text = user ? stripInlineContextReferences(message.text) : message.text;
             return (
               <article
                 key={message.id}
