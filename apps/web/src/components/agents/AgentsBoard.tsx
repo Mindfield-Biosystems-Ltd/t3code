@@ -4,7 +4,7 @@ import * as Schema from "effect/Schema";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { Menu, MenuTrigger, MenuPopup, MenuItem } from "../ui/menu";
 import { AgentIcon, agentColors } from "./AgentIcon";
-import { Link } from "@tanstack/react-router";
+import { Link, Outlet, useLocation } from "@tanstack/react-router";
 import { useMemo, useState, type CSSProperties } from "react";
 import {
   PlusIcon,
@@ -17,6 +17,7 @@ import {
   SquarePenIcon,
   SearchIcon,
   XIcon,
+  LayoutGridIcon,
 } from "lucide-react";
 import type { McpGatewayProfile } from "@t3tools/contracts";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
@@ -25,19 +26,21 @@ import { useEnvironments } from "../../state/environments";
 import { useThreadShells, useAllEnvironmentShellsBootstrapped } from "../../state/entities";
 import { AgentEditor } from "./AgentEditor";
 import { AgentTaskDialog } from "./AgentTaskDialog";
-import { groupAgentThreads } from "./agents.logic";
+import { groupAgentThreads, selectAgentWorkspaceThreads } from "./agents.logic";
 import { SidebarMenuButton } from "../ui/sidebar";
 import { openCommandPalette } from "../../commandPaletteBus";
-import { searchSidebarThreadsByTitle } from "../Sidebar.logic";
 import { Dialog, DialogPopup, DialogTitle, DialogDescription } from "../ui/dialog";
 
+const agentFilterSchema = Schema.NullOr(Schema.String);
 const agentOrderSchema = Schema.Array(Schema.String);
 const emptyAgentOrder: readonly string[] = [];
 
 function AgentThreadList({
   threads,
   onContextMenu,
+  profiles,
 }: {
+  profiles: readonly McpGatewayProfile[];
   threads: readonly EnvironmentThreadShell[];
   onContextMenu: (
     thread: EnvironmentThreadShell,
@@ -51,19 +54,13 @@ function AgentThreadList({
     <ThreadCard
       key={`${thread.environmentId}:${thread.id}`}
       thread={thread}
+      profile={profiles.find((profile) => profile.profileId === thread.profileSnapshot?.profileId)}
       onContextMenu={onContextMenu}
     />
   );
   return (
     <div className="agent-thread-list">
       {active.map(renderCard)}
-      {threads.length === 0 && (
-        <p className="agent-empty">
-          Ready when you are.
-          <br />
-          Start a new chat.
-        </p>
-      )}
       {settled.length > 0 && (
         <details
           className="agent-settled"
@@ -105,8 +102,12 @@ export function AgentsBoard() {
   const [editor, setEditor] = useState<McpGatewayProfile | "new" | null>(null);
   const [task, setTask] = useState<McpGatewayProfile | null>(null);
   const [query, setQuery] = useState("");
-  const searching = query.trim().length > 0;
-  const results = useMemo(() => searchSidebarThreadsByTitle(threads, query), [threads, query]);
+  const [savedFilter, setFilter] = useLocalStorage("t3code:agents:filter", null, agentFilterSchema);
+  const filter = profiles.some((profile) => profile.profileId === savedFilter) ? savedFilter : null;
+  const [showFilters, setShowFilters] = useState(false);
+  const selected = useLocation({
+    select: (location) => location.pathname.split("/").filter(Boolean).length > 1,
+  });
   const [deleting, setDeleting] = useState<McpGatewayProfile | null>(null);
   const [busy, setBusy] = useState(false);
   const [deleteError, setDeleteError] = useState("");
@@ -114,9 +115,16 @@ export function AgentsBoard() {
     () => groupAgentThreads(profiles, threads),
     [profiles, threads],
   );
+  const allThreads = useMemo(() => [...groups.values(), orphaned].flat(), [groups, orphaned]);
+  const visible = useMemo(() => {
+    const { active, settled } = selectAgentWorkspaceThreads(threads, filter, query);
+    return [...active, ...settled];
+  }, [threads, filter, query]);
+  const activeCount = (items: readonly EnvironmentThreadShell[]) =>
+    items.filter((thread) => thread.settledAt === null).length;
   const online = environments.filter((env) => env.connection.phase === "connected");
   return (
-    <div className="agents-page">
+    <div className="agents-page" data-thread-selected={selected} data-show-filters={showFilters}>
       <header className="agents-topbar">
         <Link to="/" className="agents-brand">
           <strong>T3</strong>
@@ -171,139 +179,132 @@ export function AgentsBoard() {
           Loading connected environments…
         </p>
       )}
-      {searching ? (
-        <main className="agents-search-results" aria-label="Chat search results">
-          <p role="status">
-            {results.length} {results.length === 1 ? "chat" : "chats"} found across all projects
-          </p>
-          {results.map((thread) => (
-            <ThreadCard
-              key={`${thread.environmentId}:${thread.id}`}
-              onContextMenu={onThreadContextMenu}
-              thread={thread}
-            />
-          ))}
-        </main>
-      ) : (
-        <>
-          <main className="agents-board" aria-label="Agents board">
-            {orderedProfiles.map((profile, index) => (
-              <section
-                key={profile.profileId}
-                className="agent-column"
-                style={
-                  {
-                    "--agent-color":
-                      profile.color ??
-                      agentColors[
-                        profiles.findIndex((item) => item.profileId === profile.profileId) %
-                          agentColors.length
-                      ],
-                  } as CSSProperties
-                }
-                aria-label={`${profile.name} agent`}
-              >
-                <div className="agent-column-header">
-                  <div className="agent-heading">
-                    <AgentIcon icon={profile.icon} />
-                    <h2>{profile.name}</h2>
-
-                    <SidebarMenuButton
-                      size="icon"
-                      type="button"
-                      aria-label={`New chat with ${profile.name}`}
-                      tooltip="New chat"
-                      disabled={profile.runtimeMode === "read-only"}
-                      onClick={() => setTask(profile)}
-                    >
-                      <SquarePenIcon />
-                    </SidebarMenuButton>
-                    <Menu>
-                      <MenuTrigger
-                        className="agent-icon-button"
-                        aria-label={`Options for ${profile.name}`}
-                      >
-                        <MoreHorizontalIcon size={14} />
-                      </MenuTrigger>
-                      <MenuPopup align="end">
-                        <MenuItem disabled={!available} onClick={() => setEditor(profile)}>
-                          <PencilIcon />
-                          Edit agent
-                        </MenuItem>
-                        <MenuItem disabled={index === 0} onClick={() => moveAgent(index, -1)}>
-                          <ArrowLeftIcon />
-                          Move left
-                        </MenuItem>
-                        <MenuItem
-                          disabled={index === orderedProfiles.length - 1}
-                          onClick={() => moveAgent(index, 1)}
-                        >
-                          <ArrowRightIcon />
-                          Move right
-                        </MenuItem>
-                        <MenuItem
-                          disabled={!available}
-                          onClick={() => {
-                            setDeleting(profile);
-                            setDeleteError("");
-                          }}
-                        >
-                          <Trash2Icon />
-                          Delete agent
-                        </MenuItem>
-                      </MenuPopup>
-                    </Menu>
-                  </div>
-                  <div className="agent-chips">
-                    <span className="agent-provider">
-                      {profile.providerLabel ??
-                        profile.modelSelection?.instanceId ??
-                        "Select provider"}
-                    </span>
-                    <span>
-                      {profile.modelLabel ?? profile.modelSelection?.model ?? "Select model"}
-                    </span>
-                    <span>thinking {profile.reasoningEffort ?? "default"}</span>
-                  </div>
-
-                  {profile.runtimeMode === "read-only" && (
-                    <p className="text-xs text-muted-foreground">
-                      Read-only profiles cannot start threads.
-                    </p>
-                  )}
-                </div>
-                <AgentThreadList
-                  threads={groups.get(profile.profileId) ?? []}
-                  onContextMenu={onThreadContextMenu}
-                />
-              </section>
-            ))}
-            <button
-              className="agent-new-column"
-              disabled={!available}
-              onClick={() => setEditor("new")}
+      <main className="agents-workspace" aria-label="Agents workspace">
+        <aside className="agents-filters" aria-label="Agent filters">
+          <h2>Agents</h2>
+          <button
+            className="agent-filter"
+            aria-pressed={filter === null}
+            onClick={() => {
+              setFilter(null);
+              setShowFilters(false);
+            }}
+          >
+            <LayoutGridIcon size={22} />
+            <span>All</span>
+            <span>{activeCount(allThreads)}</span>
+          </button>
+          {orderedProfiles.map((profile, index) => (
+            <div
+              key={profile.profileId}
+              className="agent-filter-row"
+              style={
+                {
+                  "--agent-color":
+                    profile.color ??
+                    agentColors[
+                      profiles.findIndex((item) => item.profileId === profile.profileId) %
+                        agentColors.length
+                    ],
+                } as CSSProperties
+              }
             >
-              <span className="agent-new-icon">
-                <PlusIcon />
-              </span>
-              <strong>New agent</strong>
-              <span>
-                Name a specialist. Pin provider,
-                <br />
-                model, and thinking.
-                <br />
-                Give it a task when you’re ready.
-              </span>
-            </button>
-          </main>
-          {orphaned.length > 0 && (
-            <details className="agents-removed">
-              <summary>Removed agents · {orphaned.length} chats</summary>
-              <AgentThreadList threads={orphaned} onContextMenu={onThreadContextMenu} />
-            </details>
+              <button
+                className="agent-filter"
+                aria-pressed={filter === profile.profileId}
+                onClick={() => {
+                  setFilter(profile.profileId);
+                  setShowFilters(false);
+                }}
+              >
+                <AgentIcon icon={profile.icon} />
+                <span>{profile.name}</span>
+                <span>{activeCount(groups.get(profile.profileId) ?? [])}</span>
+              </button>
+              <div className="agent-filter-actions">
+                <SidebarMenuButton
+                  size="icon"
+                  type="button"
+                  aria-label={`New chat with ${profile.name}`}
+                  tooltip="New chat"
+                  disabled={profile.runtimeMode === "read-only"}
+                  onClick={() => setTask(profile)}
+                >
+                  <SquarePenIcon />
+                </SidebarMenuButton>
+                <Menu>
+                  <MenuTrigger
+                    className="agent-icon-button"
+                    aria-label={`Options for ${profile.name}`}
+                  >
+                    <MoreHorizontalIcon size={14} />
+                  </MenuTrigger>
+                  <MenuPopup align="end">
+                    <MenuItem disabled={!available} onClick={() => setEditor(profile)}>
+                      <PencilIcon />
+                      Edit agent
+                    </MenuItem>
+                    <MenuItem disabled={index === 0} onClick={() => moveAgent(index, -1)}>
+                      <ArrowLeftIcon />
+                      Move up
+                    </MenuItem>
+                    <MenuItem
+                      disabled={index === orderedProfiles.length - 1}
+                      onClick={() => moveAgent(index, 1)}
+                    >
+                      <ArrowRightIcon />
+                      Move down
+                    </MenuItem>
+                    <MenuItem
+                      disabled={!available}
+                      onClick={() => {
+                        setDeleting(profile);
+                        setDeleteError("");
+                      }}
+                    >
+                      <Trash2Icon />
+                      Delete agent
+                    </MenuItem>
+                  </MenuPopup>
+                </Menu>
+              </div>
+            </div>
+          ))}
+          {profiles.length === 0 && (
+            <p className="agent-empty">No agents yet. Create an agent to start a chat.</p>
           )}
-        </>
-      )}
+        </aside>
+        <section className="agents-threads" aria-label="Threads">
+          <header>
+            <button
+              className="agent-mobile-filters agent-icon-button"
+              onClick={() => setShowFilters(true)}
+            >
+              <ArrowLeftIcon size={14} /> Agents
+            </button>
+            <h2>
+              Threads
+              {filter !== null
+                ? ` · ${profiles.find((profile) => profile.profileId === filter)?.name ?? "Agent unavailable"}`
+                : ""}
+            </h2>
+            <p>Active & unread</p>
+          </header>
+          {visible.length === 0 && (
+            <p role="status" className="agent-empty">
+              {query ? "No chats match your search." : "No threads here yet."}
+            </p>
+          )}
+          <AgentThreadList
+            threads={visible}
+            profiles={profiles}
+            onContextMenu={onThreadContextMenu}
+          />
+        </section>
+        <section className="agents-chat-pane">
+          <Outlet />
+        </section>
+      </main>
       {editor !== null && (
         <AgentEditor
           profile={editor === "new" ? null : editor}

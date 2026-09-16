@@ -63,3 +63,24 @@ export function isAgentChatInFocus(
     Date.parse(completedAt) > Date.parse(lastVisitedAt)
   );
 }
+
+/** The workspace keeps completed chats visible until they are explicitly settled. */
+export function selectAgentWorkspaceThreads(
+  threads: readonly EnvironmentThreadShell[],
+  profileId: string | null,
+  query: string,
+) {
+  const search = query.trim().toLocaleLowerCase();
+  const matches = threads
+    .filter(
+      (thread) =>
+        (Boolean(thread.profileSnapshot?.profileId) || (profileId === null && search.length > 0)) &&
+        (profileId === null || thread.profileSnapshot?.profileId === profileId) &&
+        (!search || thread.title.toLocaleLowerCase().includes(search)),
+    )
+    .toSorted((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return {
+    active: matches.filter((thread) => thread.settledAt === null),
+    settled: matches.filter((thread) => thread.settledAt !== null),
+  };
+}

@@ -5,7 +5,12 @@ import {
   type McpGatewayProfile,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
-import { agentThreadStatus, groupAgentThreads, isAgentChatInFocus } from "./agents.logic";
+import {
+  agentThreadStatus,
+  groupAgentThreads,
+  isAgentChatInFocus,
+  selectAgentWorkspaceThreads,
+} from "./agents.logic";
 const profile: McpGatewayProfile = {
   profileId: "write",
   name: "Write",
@@ -101,5 +106,40 @@ describe("agent chat focus", () => {
     const settled = { ...completed(), settledAt: "2026-09-06T00:03:00.000Z" };
     expect(isAgentChatInFocus(settled, undefined, false)).toBe(false);
     expect(isAgentChatInFocus(settled, undefined, true)).toBe(true);
+  });
+});
+
+describe("agent workspace selection", () => {
+  it("includes completed unsettled work across environments, filters by agent, and clears back to All", () => {
+    const done = {
+      ...thread("completed task", "write"),
+      latestTurn: {
+        turnId: "turn" as NonNullable<ReturnType<typeof thread>["latestTurn"]>["turnId"],
+        state: "completed" as const,
+        requestedAt: "2026-09-06T00:00:00.000Z",
+        startedAt: null,
+        completedAt: "2026-09-06T00:02:00.000Z",
+        assistantMessageId: null,
+      },
+    };
+    const remote = {
+      ...thread("remote task", "review"),
+      environmentId: EnvironmentId.make("remote"),
+    };
+    const settled = thread("settled task", "write", "2026-09-06T01:00:00.000Z");
+    const items = [done, remote, settled, thread("ordinary task", null)];
+    expect(selectAgentWorkspaceThreads(items, null, "")).toEqual({
+      active: [done, remote],
+      settled: [settled],
+    });
+    expect(selectAgentWorkspaceThreads(items, "write", "")).toEqual({
+      active: [done],
+      settled: [settled],
+    });
+    expect(selectAgentWorkspaceThreads(items, null, "").active).toEqual([done, remote]);
+    expect(selectAgentWorkspaceThreads(items, null, " REMOTE ").active).toEqual([remote]);
+    expect(selectAgentWorkspaceThreads(items, "write", "remote").active).toEqual([]);
+    expect(selectAgentWorkspaceThreads(items, null, "ordinary").active).toEqual([items[3]]);
+    expect(selectAgentWorkspaceThreads([], null, "")).toEqual({ active: [], settled: [] });
   });
 });
