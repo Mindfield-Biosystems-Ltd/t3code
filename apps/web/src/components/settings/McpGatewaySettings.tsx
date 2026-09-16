@@ -635,9 +635,16 @@ export function McpGatewaySettings() {
                 <Button
                   size="sm"
                   onClick={() => {
-                    setMcpGatewayGrants(pendingGrants);
-                    setSavedGrants(pendingGrants);
-                    setPendingGrants(null);
+                    try {
+                      setMcpGatewayGrants(pendingGrants);
+                      setSavedGrants(pendingGrants);
+                      setPendingGrants(null);
+                      setConfigurationError(null);
+                    } catch {
+                      setConfigurationError(
+                        "Could not save gateway permissions. Your changes have not been applied.",
+                      );
+                    }
                   }}
                 >
                   Save

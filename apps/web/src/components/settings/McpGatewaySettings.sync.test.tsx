@@ -31,6 +31,31 @@ vi.mock("./settingsLayout", () => ({
 
 afterEach(() => vi.unstubAllGlobals());
 
+it("keeps gateway access disabled and reports failed storage writes", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal(
+    "window",
+    Object.assign(new EventTarget(), {
+      localStorage: {
+        getItem: () => null,
+        setItem: () => {
+          throw new Error("Storage denied");
+        },
+      },
+      sessionStorage: { getItem: () => "", setItem: () => {} },
+    }),
+  );
+  const renderer = await act(async () => create(<McpGatewaySettings />));
+  try {
+    const toggle = renderer.root.findAllByProps({ "aria-label": "Enable MCP Gateway" })[0]!;
+    await act(async () => toggle.props.onCheckedChange(true));
+    expect(toggle.props.checked).toBe(false);
+    expect(JSON.stringify(renderer.toJSON())).toContain("Gateway settings could not be saved");
+  } finally {
+    await act(async () => renderer.unmount());
+  }
+});
+
 it("refreshes visible gateway access when another window changes saved settings", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const values = new Map<string, string>();

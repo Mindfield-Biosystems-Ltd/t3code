@@ -4,6 +4,7 @@ import * as Deferred from "effect/Deferred";
 import * as TestClock from "effect/testing/TestClock";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 
@@ -26,6 +27,40 @@ const testCrypto = Crypto.make({
 });
 
 describe("Gateway Runtime Port", () => {
+  for (const operation of ["listProjects", "getThread"] as const) {
+    it.effect(`interrupts an offline ${operation} snapshot after the request deadline`, () =>
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>();
+        let released = false;
+        const registry = EnvironmentRegistry.of({
+          run: () =>
+            Deferred.succeed(started, undefined).pipe(
+              Effect.andThen(Effect.never),
+              Effect.ensuring(
+                Effect.sync(() => {
+                  released = true;
+                }),
+              ),
+            ),
+        } as unknown as EnvironmentRegistry["Service"]);
+        const context = yield* Effect.context<EnvironmentRegistry | Crypto.Crypto>().pipe(
+          Effect.provideService(EnvironmentRegistry, registry),
+          Effect.provideService(Crypto.Crypto, testCrypto),
+        );
+        const port = createGatewayRuntimePortFromContext(context);
+        const request = yield* Effect.tryPromise(async (): Promise<unknown> =>
+          operation === "listProjects"
+            ? port.listProjects(environmentId)
+            : port.getThread(environmentId, "offline-thread"),
+        ).pipe(Effect.exit, Effect.forkChild);
+        yield* Deferred.await(started);
+        yield* TestClock.adjust("21 seconds");
+        const result = yield* Fiber.join(request);
+        expect(result._tag).toBe("Failure");
+        expect(released).toBe(true);
+      }),
+    );
+  }
   it("resolves readable labels only when one live provider/model pair matches", () => {
     const profile = {
       profileId: "profile-andy",
