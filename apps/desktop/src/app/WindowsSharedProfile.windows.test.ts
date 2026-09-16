@@ -24,10 +24,11 @@ it.skipIf(process.platform !== "win32")(
     const root=process.env.T3_PROFILE_TEST_ROOT, phase=process.env.T3_PROFILE_TEST_PHASE;
     const original=path.join(root,'original');
     fs.mkdirSync(original,{recursive:true});
-    // Reproduce the current application: setPath is correct, but native Windows
-    // encryption has already opened the startup profile before JS executes.
-    app.setPath('userData',original);
+    // Reproduce asynchronous application setup: native Windows encryption can
+    // initialize before the shared profile is selected after app readiness.
+    if(phase==='early') app.setPath('userData',original);
     app.whenReady().then(async()=>{
+      app.setPath('userData',original);
       const fixture=path.join(root,'credential.json');
       const result={};
       if(phase==='seed'){
@@ -66,6 +67,7 @@ it.skipIf(process.platform !== "win32")(
       // Verify a same-profile restart before testing the deliberately wrong profile.
       expect(run("baseline", [`--user-data-dir=${original}`])).toEqual({ sync: true, async: true });
       expect(run("broken", [`--user-data-dir=${fork}`])).toEqual({ sync: false, async: false });
+      expect(run("early", [`--user-data-dir=${fork}`])).toEqual({ sync: true, async: true });
       const args = sharedProfileRelaunchArgs({
         platform: "win32",
         brand: "agents",
