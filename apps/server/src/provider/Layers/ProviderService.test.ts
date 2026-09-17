@@ -1,3 +1,4 @@
+import * as McpGatewayBroker from "../../mcp/McpGatewayBroker.ts";
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
@@ -5064,6 +5065,31 @@ describe("agent browser access", () => {
 
       return issued;
     });
+
+  it.effect("grants managed gateway access only while the desktop relay is enabled", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const broker = yield* McpGatewayBroker.McpGatewayBroker;
+        const ready = yield* Deferred.make<void>();
+        const relay = yield* broker.connect("desktop-session").pipe(
+          Stream.runForEach((event) =>
+            event.type === "connected" ? Deferred.succeed(ready, undefined) : Effect.void,
+          ),
+          Effect.forkScoped,
+        );
+        yield* Deferred.await(ready);
+        const enabledThread = asThreadId("thread-gateway-enabled");
+        assert.deepEqual(yield* startSessionWith(false, enabledThread), [
+          { threadId: enabledThread, capabilities: ["gateway", "pull-requests"] },
+        ]);
+        yield* Fiber.interrupt(relay);
+        const disabledThread = asThreadId("thread-gateway-disabled");
+        assert.deepEqual(yield* startSessionWith(false, disabledThread), [
+          { threadId: disabledThread, capabilities: ["pull-requests"] },
+        ]);
+      }),
+    ).pipe(Effect.provide(McpGatewayBroker.layer.pipe(Layer.provideMerge(NodeServices.layer)))),
+  );
 
   // The capability on the credential is the observable that matters: a session
   // always gets a credential (the pull request toolkit is never withheld), and

@@ -6,6 +6,7 @@ export interface McpProviderSessionConfig {
   readonly providerSessionId: string;
   readonly providerInstanceId: ProviderInstanceId;
   readonly endpoint: string;
+  readonly gatewayEndpoint?: string;
   readonly authorizationHeader: string;
   /** Capabilities the credential grants ("preview", "device"). */
   readonly capabilities: ReadonlySet<string>;
@@ -50,4 +51,21 @@ export function clearMcpProviderSession(threadId: ThreadId): void {
 
 export function clearAllMcpProviderSessions(): void {
   sessionsByThread.clear();
+}
+
+/** Both endpoints stay local to the provider host; only the gateway traffic is relayed. */
+export function mcpHttpServers(config: McpProviderSessionConfig | undefined) {
+  if (!config) return [];
+  return [
+    { name: "t3-code", url: config.endpoint, authorizationHeader: config.authorizationHeader },
+    ...(config.gatewayEndpoint
+      ? [
+          {
+            name: "t3-gateway",
+            url: config.gatewayEndpoint,
+            authorizationHeader: config.authorizationHeader,
+          },
+        ]
+      : []),
+  ];
 }

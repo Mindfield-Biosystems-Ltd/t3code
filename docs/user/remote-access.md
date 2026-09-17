@@ -190,9 +190,17 @@ devices. For server version warnings, follow [Updating T3 Code](./updating.md).
 
 ## Use MCP with connected environments
 
-Configure your assistant using the launch configuration in **Settings → MCP Gateway**, then enable
-the gateway in the desktop app. Keep that desktop connected to the environments your assistant
-needs to access. If you configure a custom companion port, set the same **Bridge port** in MCP Gateway settings; the standard port works without changing it.
+Enable **Settings → MCP Gateway** in the desktop app, then grant access to the environments
+that your agents need. New T3-managed agent sessions on granted environments receive the
+gateway tools automatically, including sessions running on remote machines. Restart existing
+agent sessions to attach the gateway. Keep this desktop connected while the agents use it.
+Disabling the gateway disconnects managed gateway sessions immediately.
+
+For assistants outside T3 Code, copy the external MCP host configuration from the same page.
+For standalone OpenCode, merge **Copy OpenCode config** into `~/.config/opencode/opencode.jsonc`
+on the desktop's machine, preserving existing servers, then reconnect OpenCode. Other hosts
+using `mcpServers` can use **Copy MCP config**. The copied configuration includes the bridge
+token and the desktop's state-file path.
 
 Enable access per environment and select **Save** to apply permission changes. Default access allows
 reading chats, creating threads, and sending messages. **Enable all environments** enables machines

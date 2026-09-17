@@ -1,3 +1,8 @@
+import {
+  McpGatewayRelayEvent,
+  McpGatewayRelayResponse,
+  McpGatewayUnavailableError,
+} from "./mcpGateway.ts";
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
@@ -342,6 +347,8 @@ export const WS_METHODS = {
   previewClose: "preview.close",
   previewList: "preview.list",
   previewReportStatus: "preview.reportStatus",
+  mcpGatewayConnect: "mcpGateway.connect",
+  mcpGatewayRespond: "mcpGateway.respond",
   previewAutomationConnect: "previewAutomation.connect",
   previewAutomationRespond: "previewAutomation.respond",
   previewAutomationFocusHost: "previewAutomation.focusHost",
@@ -1163,6 +1170,17 @@ const WsPreviewReportStatusRpc = Rpc.make(WS_METHODS.previewReportStatus, {
   error: Schema.Union([PreviewError, EnvironmentAuthorizationError]),
 });
 
+const WsMcpGatewayConnectRpc = Rpc.make(WS_METHODS.mcpGatewayConnect, {
+  payload: Schema.Struct({}),
+  success: McpGatewayRelayEvent,
+  error: Schema.Union([McpGatewayUnavailableError, EnvironmentAuthorizationError]),
+  stream: true,
+});
+const WsMcpGatewayRespondRpc = Rpc.make(WS_METHODS.mcpGatewayRespond, {
+  payload: McpGatewayRelayResponse,
+  error: Schema.Union([McpGatewayUnavailableError, EnvironmentAuthorizationError]),
+});
+
 const WsPreviewAutomationConnectRpc = Rpc.make(WS_METHODS.previewAutomationConnect, {
   payload: PreviewAutomationHost,
   success: PreviewAutomationStreamEvent,
@@ -1496,6 +1514,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsPreviewCloseRpc,
   WsPreviewListRpc,
   WsPreviewReportStatusRpc,
+  WsMcpGatewayConnectRpc,
+  WsMcpGatewayRespondRpc,
   WsPreviewAutomationConnectRpc,
   WsPreviewAutomationRespondRpc,
   WsPreviewAutomationFocusHostRpc,

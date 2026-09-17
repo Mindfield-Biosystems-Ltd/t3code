@@ -1,3 +1,4 @@
+import * as McpGatewayBroker from "./mcp/McpGatewayBroker.ts";
 import {
   sameUsageLimitCommandCoverage,
   withUsageLimitsCommands,
@@ -497,6 +498,7 @@ const makeWsRpcLayer = (
   clientOrigin: OrchestrationClientOrigin,
   clientAnalyticsProps: Readonly<Record<string, unknown>>,
   previewAutomationBroker: PreviewAutomationBroker.PreviewAutomationBroker["Service"],
+  mcpGatewayBroker: McpGatewayBroker.McpGatewayBroker["Service"],
 ) =>
   WsRpcGroup.toLayer(
     Effect.gen(function* () {
@@ -3482,6 +3484,18 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.previewReportStatus, previewManager.reportStatus(input), {
             "rpc.aggregate": "preview",
           }),
+        [WS_METHODS.mcpGatewayConnect]: () =>
+          observeRpcStream(
+            WS_METHODS.mcpGatewayConnect,
+            mcpGatewayBroker.connect(currentSessionId),
+            { "rpc.aggregate": "mcp-gateway" },
+          ),
+        [WS_METHODS.mcpGatewayRespond]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.mcpGatewayRespond,
+            mcpGatewayBroker.respond(currentSessionId, input),
+            { "rpc.aggregate": "mcp-gateway" },
+          ),
         [WS_METHODS.previewAutomationConnect]: (input) =>
           observeRpcStreamEffect(
             WS_METHODS.previewAutomationConnect,
@@ -3758,6 +3772,7 @@ const makeWsRpcLayer = (
 export const websocketRpcRouteLayer = Layer.unwrap(
   Effect.gen(function* () {
     const previewAutomationBroker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
+    const mcpGatewayBroker = yield* McpGatewayBroker.McpGatewayBroker;
     const baseServerSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
     const config = yield* ServerConfig.ServerConfig;
     const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
@@ -3824,6 +3839,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
               clientOrigin,
               clientAnalyticsProps,
               previewAutomationBroker,
+              mcpGatewayBroker,
             ).pipe(
               Layer.provideMerge(RpcSerialization.layerJson),
               Layer.provide(Layer.succeed(SqlClient.SqlClient, sql)),

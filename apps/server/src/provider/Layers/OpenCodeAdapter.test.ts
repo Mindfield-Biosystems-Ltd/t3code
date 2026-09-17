@@ -1,3 +1,4 @@
+import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import * as NodeAssert from "node:assert/strict";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
@@ -26,6 +27,7 @@ import type {
 
 import {
   ApprovalRequestId,
+  EnvironmentId,
   OpenCodeSettings,
   ProviderDriverKind,
   ProviderInstanceId,
@@ -55,6 +57,8 @@ class OpenCodeAdapter extends Context.Service<OpenCodeAdapter, OpenCodeAdapterSh
   "t3/provider/Layers/OpenCodeAdapter.test/OpenCodeAdapter",
 ) {}
 
+const decodeOpenCodeSettings = Schema.decodeEffect(OpenCodeSettings);
+
 const asThreadId = (value: string): ThreadId => ThreadId.make(value);
 
 type MessageEntry = {
@@ -68,6 +72,7 @@ type MessageEntry = {
 const runtimeMock = {
   state: {
     startCalls: [] as string[],
+    mcpAdds: [] as Array<{ name: string; config: unknown }>,
     sessionCreateUrls: [] as string[],
     sessionCreateInputs: [] as Array<Record<string, unknown>>,
     createdSessionIds: [] as string[],
@@ -138,6 +143,7 @@ const runtimeMock = {
   },
   reset() {
     this.state.startCalls.length = 0;
+    this.state.mcpAdds.length = 0;
     this.state.sessionCreateUrls.length = 0;
     this.state.sessionCreateInputs.length = 0;
     this.state.createdSessionIds.length = 0;
@@ -246,6 +252,12 @@ const OpenCodeRuntimeTestDouble: OpenCodeRuntimeShape = {
         list: async () => ({
           data: [{ name: "review", source: "command", hints: ["$ARGUMENTS"] }],
         }),
+      },
+      mcp: {
+        add: async (input: { name: string; config: unknown }) => {
+          runtimeMock.state.mcpAdds.push(input);
+          return { data: {} };
+        },
       },
       session: {
         create: async (input: Record<string, unknown>) => {
@@ -7967,3 +7979,55 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
     }),
   );
 });
+
+it.effect(
+  "registers the managed gateway alongside preview tools before creating a local OpenCode session",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const threadId = asThreadId("managed-gateway-session");
+        McpProviderSession.setMcpProviderSession({
+          environmentId: EnvironmentId.make("remote-t3-environment"),
+          threadId,
+          providerSessionId: "gateway-provider-session",
+          providerInstanceId: ProviderInstanceId.make("opencode"),
+          endpoint: "http://127.0.0.1:45678/mcp",
+          gatewayEndpoint: "http://127.0.0.1:45678/mcp/gateway",
+          authorizationHeader: "Bearer provider-scoped-test-token",
+          capabilities: new Set(["gateway"]),
+        });
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => McpProviderSession.clearMcpProviderSession(threadId)),
+        );
+        const adapter = yield* makeOpenCodeAdapter(
+          yield* decodeOpenCodeSettings({ binaryPath: "fake-opencode" }),
+        );
+        yield* adapter.startSession({
+          provider: ProviderDriverKind.make("opencode"),
+          threadId,
+          runtimeMode: "full-access",
+        });
+        NodeAssert.deepEqual(runtimeMock.state.mcpAdds, [
+          {
+            name: "t3-code",
+            config: {
+              type: "remote",
+              url: "http://127.0.0.1:45678/mcp",
+              headers: { Authorization: "Bearer provider-scoped-test-token" },
+              oauth: false,
+            },
+          },
+          {
+            name: "t3-gateway",
+            config: {
+              type: "remote",
+              url: "http://127.0.0.1:45678/mcp/gateway",
+              headers: { Authorization: "Bearer provider-scoped-test-token" },
+              oauth: false,
+            },
+          },
+        ]);
+        yield* adapter.stopSession(threadId);
+      }),
+    ).pipe(Effect.provide(OpenCodeAdapterTestLayer)),
+);

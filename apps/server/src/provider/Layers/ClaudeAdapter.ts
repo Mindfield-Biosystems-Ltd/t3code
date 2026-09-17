@@ -4955,15 +4955,16 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         ...(Object.keys(extraArgs).length > 0 ? { extraArgs } : {}),
         ...(mcpSession
           ? {
-              mcpServers: {
-                "t3-code": {
-                  type: "http",
-                  url: mcpSession.endpoint,
-                  headers: {
-                    Authorization: mcpSession.authorizationHeader,
+              mcpServers: Object.fromEntries(
+                McpProviderSession.mcpHttpServers(mcpSession).map((mcp) => [
+                  mcp.name,
+                  {
+                    type: "http" as const,
+                    url: mcp.url,
+                    headers: { Authorization: mcp.authorizationHeader },
                   },
-                },
-              },
+                ]),
+              ),
             }
           : {}),
       };
