@@ -1192,6 +1192,10 @@ export const ServerSettings = Schema.Struct({
   defaultThemeSetAt: Schema.String.check(Schema.isMaxLength(64)).pipe(
     Schema.withDecodingDefault(Effect.succeed("")),
   ),
+  /** A shared display name for this machine. Null restores its connection label. */
+  environmentLabel: Schema.NullOr(TrimmedNonEmptyString.check(Schema.isMaxLength(80))).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
   /**
    * The icon clients draw for this environment. Null means "use what the
    * server detected" (`environment.platform.machine`), falling back to a
@@ -1474,6 +1478,9 @@ export const ServerSettingsPatch = Schema.Struct({
   automaticGitFetchInterval: Schema.optionalKey(Schema.DurationFromMillis),
   providerHealthRefreshInterval: Schema.optionalKey(Schema.DurationFromMillis),
   backgroundActivityProfile: Schema.optionalKey(BackgroundActivityProfile),
+  environmentLabel: Schema.optionalKey(
+    Schema.NullOr(TrimmedNonEmptyString.check(Schema.isMaxLength(80))),
+  ),
   environmentIcon: Schema.optionalKey(Schema.NullOr(EnvironmentMachineKind)),
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
   newWorktreesStartFromOrigin: Schema.optionalKey(Schema.Boolean),

@@ -3,6 +3,10 @@
 Connect a phone, browser, or another desktop app to T3 Code running on a different
 machine. That machine must stay running and reachable while you work.
 
+In **Settings → Connections**, open a machine’s **More actions** menu to rename it or
+choose its icon (including desktop, laptop, and server). Names and icons are saved on
+that machine and shown on connected devices. **Reset name** restores the original name.
+
 ## T3 Connect
 
 T3 Connect makes an environment available to your other devices without setting

@@ -1,3 +1,7 @@
+import {
+  planPinnedMove,
+  sortActiveThreadsByOrderKey,
+} from "@t3tools/client-runtime/state/thread-sort";
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import type { McpGatewayProfile } from "@t3tools/contracts";
@@ -84,7 +88,7 @@ export function selectAgentWorkspaceThreads(
     )
     .toSorted((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return {
-    active: matches.filter((thread) => thread.settledAt === null),
+    active: sortActiveThreadsByOrderKey(matches.filter((thread) => thread.settledAt === null)),
     settled: matches.filter((thread) => thread.settledAt !== null),
   };
 }
@@ -126,4 +130,24 @@ export function excludePinnedAgentThreads<T extends { environmentId: string; id:
   if (pinned.length === 0) return threads;
   const pinnedKeys = new Set(pinned.map(threadKey));
   return threads.filter((thread) => !pinnedKeys.has(threadKey(thread)));
+}
+
+/** Move within the displayed active stack, retaining hidden threads' reserved keys. */
+export function planAgentThreadMove(
+  visible: readonly EnvironmentThreadShell[],
+  all: readonly EnvironmentThreadShell[],
+  moved: EnvironmentThreadShell,
+  direction: "up" | "down",
+) {
+  const active = sortActiveThreadsByOrderKey(
+    visible.filter((thread) => thread.settledAt === null && thread.pinnedAt == null),
+  );
+  const byId = new Map(active.map((thread) => [threadKey(thread), thread]));
+  const plan = planPinnedMove({
+    orderedIds: active.map(threadKey),
+    keysById: new Map(all.map((thread) => [threadKey(thread), thread.activeOrderKey])),
+    movedId: threadKey(moved),
+    direction,
+  });
+  return plan?.map(({ id, orderKey }) => ({ thread: byId.get(id)!, orderKey })) ?? null;
 }

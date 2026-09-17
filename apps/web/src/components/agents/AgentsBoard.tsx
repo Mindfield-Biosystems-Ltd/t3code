@@ -1,3 +1,4 @@
+import { SortableAgentThreads } from "./SortableAgentThreads";
 import { useClientSettings } from "../../hooks/useSettings";
 import { visibleAgentProviders } from "./agentModelCatalog";
 import { ThreadCard } from "./ThreadCard";
@@ -60,10 +61,11 @@ function AgentThreadList({
   const [settledOpen, setSettledOpen] = useState(false);
   const active = threads.filter((thread) => thread.settledAt === null);
   const settled = threads.filter((thread) => thread.settledAt !== null);
-  const renderCard = (thread: EnvironmentThreadShell) => (
+  const renderCard = (thread: EnvironmentThreadShell, dragging = false) => (
     <ThreadCard
       key={`${thread.environmentId}:${thread.id}`}
       thread={thread}
+      dragging={dragging}
       profile={profiles.find((profile) => profile.profileId === thread.profileSnapshot?.profileId)}
       onContextMenu={onContextMenu}
     />
@@ -73,10 +75,10 @@ function AgentThreadList({
       {pinned.length > 0 && (
         <div className="agent-pinned" aria-label="Pinned chats">
           <div className="agent-pinned-label">Pinned</div>
-          {pinned.map(renderCard)}
+          {pinned.map((thread) => renderCard(thread))}
         </div>
       )}
-      {active.map(renderCard)}
+      <SortableAgentThreads threads={active}>{renderCard}</SortableAgentThreads>
       {settled.length > 0 && (
         <details
           className="agent-settled"
@@ -84,7 +86,9 @@ function AgentThreadList({
           onToggle={(event) => setSettledOpen(event.currentTarget.open)}
         >
           <summary>Settled · {settled.length}</summary>
-          {settledOpen && <div className="agent-thread-list">{settled.map(renderCard)}</div>}
+          {settledOpen && (
+            <div className="agent-thread-list">{settled.map((thread) => renderCard(thread))}</div>
+          )}
         </details>
       )}
     </div>
@@ -92,7 +96,6 @@ function AgentThreadList({
 }
 
 export function AgentsBoard() {
-  const onThreadContextMenu = useAgentThreadContextMenu();
   const { profiles, available, updateSettings } = useAgentLibrary();
   const [order, setOrder] = useLocalStorage(
     "t3code:agents:column-order",
@@ -140,6 +143,7 @@ export function AgentsBoard() {
     const { active, settled } = selectAgentWorkspaceThreads(threads, filter, query);
     return excludePinnedAgentThreads([...active, ...settled], pinned);
   }, [threads, filter, query, pinned]);
+  const onThreadContextMenu = useAgentThreadContextMenu(visible);
   const activeCount = (items: readonly EnvironmentThreadShell[]) =>
     items.filter((thread) => thread.settledAt === null).length;
   const online = environments.filter((env) => env.connection.phase === "connected");

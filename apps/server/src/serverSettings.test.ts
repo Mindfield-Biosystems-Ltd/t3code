@@ -140,6 +140,21 @@ it.layer(NodeServices.layer)("server settings", (it) => {
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );
 
+  it.effect("persists and resets a machine name without changing its chosen icon", () =>
+    Effect.gen(function* () {
+      const settings = yield* ServerSettingsModule.ServerSettingsService;
+      yield* settings.updateSettings({
+        environmentLabel: "Build laptop",
+        environmentIcon: "laptop",
+      });
+      assert.equal((yield* settings.getSettings).environmentLabel, "Build laptop");
+      yield* settings.updateSettings({ environmentLabel: null });
+      const reset = yield* settings.getSettings;
+      assert.isNull(reset.environmentLabel);
+      assert.equal(reset.environmentIcon, "laptop");
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+
   it.effect("decodes nested settings patches", () =>
     Effect.gen(function* () {
       assert.deepEqual(
