@@ -639,7 +639,9 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Environment icon",
     to: "/settings/connections",
     targetId: "connections-environment",
-    searchTerms: ["machine glyph sidebar mac mini studio laptop desktop server cloud vm"],
+    searchTerms: [
+      "machine name rename icon glyph sidebar mac mini studio laptop desktop server cloud vm",
+    ],
     localBackendManagementOnly: true,
   },
   {

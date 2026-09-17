@@ -11,6 +11,8 @@ import { useThreadActions } from "../../hooks/useThreadActions";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { readLocalApi } from "../../localApi";
 import {
+  readEnvironmentSupportsActiveReorder,
+  useThreadShells,
   readEnvironmentSupportsPinning,
   readEnvironmentSupportsSettlement,
   readEnvironmentSupportsTitleRegeneration,
@@ -23,7 +25,11 @@ import { useUiStateStore } from "../../uiStateStore";
 import { useClientSettings } from "../../hooks/useSettings";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 
+import { planAgentThreadMove } from "./agents.logic";
+
 type AgentThreadMenuId =
+  | "move-up"
+  | "move-down"
   | "pin"
   | "unpin"
   | "settle"
@@ -51,10 +57,12 @@ function failureToast(title: string, error: unknown) {
  * (not per card) so a board with many chat cards does not subscribe each card
  * to projects, settings, and the thread action commands.
  */
-export function useAgentThreadContextMenu() {
+export function useAgentThreadContextMenu(visible: readonly EnvironmentThreadShell[]) {
+  const threads = useThreadShells();
   const router = useRouter();
   const projects = useProjects();
   const {
+    reorderActiveThread,
     settleThread,
     unsettleThread,
     pinThread,
@@ -103,12 +111,41 @@ export function useAgentThreadContextMenu() {
           candidate.environmentId === current.environmentId && candidate.id === current.projectId,
       );
       const workspacePath = current.worktreePath ?? project?.workspaceRoot ?? null;
+      const planMove = (direction: "up" | "down") => {
+        const refresh = (items: readonly EnvironmentThreadShell[]) =>
+          items.flatMap((item) => {
+            const shell = readThreadShell(scopeThreadRef(item.environmentId, item.id));
+            return shell ? [shell] : [];
+          });
+        const plan = planAgentThreadMove(refresh(visible), refresh(threads), current, direction);
+        return plan?.every(({ thread }) =>
+          readEnvironmentSupportsActiveReorder(thread.environmentId),
+        )
+          ? plan
+          : null;
+      };
       const items: ContextMenuItem<AgentThreadMenuId>[] = [
         ...(supportsPinning
           ? [
               pinned
                 ? { id: "unpin" as const, label: "Unpin chat", icon: "pin-off" }
                 : { id: "pin" as const, label: "Pin chat to top", icon: "pin" },
+            ]
+          : []),
+        ...(!pinned && !settled
+          ? [
+              {
+                id: "move-up" as const,
+                label: "Move up",
+                icon: "arrow-up",
+                disabled: !planMove("up"),
+              },
+              {
+                id: "move-down" as const,
+                label: "Move down",
+                icon: "arrow-down",
+                disabled: !planMove("down"),
+              },
             ]
           : []),
         ...(supportsSettlement
@@ -164,6 +201,22 @@ export function useAgentThreadContextMenu() {
       };
 
       switch (action) {
+        case "move-up":
+        case "move-down": {
+          const plan = planMove(action === "move-up" ? "up" : "down");
+          if (!plan) return;
+          for (const { thread: target, orderKey } of plan) {
+            const result = await reorderActiveThread(
+              scopeThreadRef(target.environmentId, target.id),
+              orderKey,
+            );
+            if (result._tag === "Failure") {
+              failureToast("Failed to move chat", squashAtomCommandFailure(result));
+              return;
+            }
+          }
+          return;
+        }
         case "pin":
           await reportFailure("Failed to pin chat", () => pinThread(ref));
           return;
@@ -216,6 +269,9 @@ export function useAgentThreadContextMenu() {
       }
     },
     [
+      visible,
+      threads,
+      reorderActiveThread,
       archiveThread,
       confirmAndDeleteThread,
       confirmAndUnpinThread,

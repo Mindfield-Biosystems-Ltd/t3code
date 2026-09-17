@@ -1,3 +1,4 @@
+import { SortableThreadRow, type SortableThreadRowBag } from "./SortableThreadRow";
 import { requestCustomSnooze } from "./CustomSnoozeDialog";
 import { useSupportsMultiplePullRequests } from "~/hooks/useSupportsMultiplePullRequests";
 import { resolveThreadCurrentPullRequestLink } from "@t3tools/shared/threadPullRequests";
@@ -507,35 +508,6 @@ function SnoozePopoverButton(props: {
       </PopoverPopup>
     </Popover>
   );
-}
-
-// Subset of useSortable applied to a thread row's root <li>. Listeners go
-// on the whole row (no dedicated handle): the pointer sensor's distance
-// constraint keeps plain clicks working, and we skip dnd-kit's aria
-// attributes since there is no keyboard sensor and the row body already
-// carries its own button semantics.
-type SortableThreadRowBag = Pick<
-  ReturnType<typeof useSortable>,
-  "listeners" | "setNodeRef" | "transform" | "transition" | "isDragging"
->;
-
-function SortableThreadRow(props: {
-  id: string;
-  disabled: boolean;
-  children: (bag: SortableThreadRowBag) => ReactNode;
-}) {
-  const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: props.id,
-    disabled: { draggable: props.disabled },
-    animateLayoutChanges: animateSidebarLayoutChanges,
-  });
-  // dnd-kit memoizes each field but not the bag, so the memoized row would
-  // rerender on every shell update without this.
-  const bag = useMemo(
-    () => ({ listeners, setNodeRef, transform, transition, isDragging }),
-    [listeners, setNodeRef, transform, transition, isDragging],
-  );
-  return props.children(bag);
 }
 
 // Unsent work shares one look: the new-thread draft rows and thread rows
