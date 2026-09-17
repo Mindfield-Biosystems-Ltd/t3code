@@ -2,6 +2,7 @@ import {
   ApprovalRequestId,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
+  OrchestrationMessageRole,
   ProjectId,
   ProviderApprovalDecision,
   ProviderInteractionMode,
@@ -91,7 +92,7 @@ const ThreadDetail = Schema.Struct({
   messages: Schema.Array(
     Schema.Struct({
       id: Schema.String,
-      role: Schema.Literals(["user", "assistant", "system"]),
+      role: OrchestrationMessageRole,
       text: Schema.String,
       turnId: Schema.NullOr(Schema.String),
       streaming: Schema.Boolean,
