@@ -1,4 +1,4 @@
-import { GitPullRequestIcon } from "lucide-react";
+import { GitPullRequestIcon, PinIcon } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 import { useState, useRef, useEffect, type CSSProperties } from "react";
 import { Link, useLocation } from "@tanstack/react-router";
@@ -122,7 +122,12 @@ export function ThreadCard({
           className={`agent-thread agent-thread-${status}`}
         >
           <div className="agent-thread-title">
-            <strong>{thread.title}</strong>
+            <strong>
+              {thread.pinnedAt != null && (
+                <PinIcon aria-label="Pinned" className="agent-thread-pin" size={11} />
+              )}
+              {thread.title}
+            </strong>
             <div className="agent-thread-identity">
               {thread.profileSnapshot && (
                 <span>

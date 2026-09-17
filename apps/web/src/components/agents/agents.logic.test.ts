@@ -10,6 +10,8 @@ import {
   groupAgentThreads,
   isAgentChatInFocus,
   selectAgentWorkspaceThreads,
+  selectPinnedAgentThreads,
+  excludePinnedAgentThreads,
   resolveAgentTaskProject,
 } from "./agents.logic";
 const profile: McpGatewayProfile = {
@@ -160,6 +162,30 @@ describe("agent task project selection", () => {
     expect(resolveAgentTaskProject(projects.slice(0, 2), "mac", "t3code")).toBeUndefined();
     expect(resolveAgentTaskProject(projects, "windows", "buildthings")).toBeUndefined();
     expect(resolveAgentTaskProject(projects, "linux", "t3code")).toBeUndefined();
+  });
+});
+
+describe("pinned agent chats", () => {
+  it("lists unsettled pins newest-first and removes them from the filtered list", () => {
+    const pinned = { ...thread("pinned", "write"), pinnedAt: "2026-09-06T02:00:00.000Z" };
+    const olderPin = {
+      ...thread("older-pin", "review"),
+      environmentId: EnvironmentId.make("remote"),
+      pinnedAt: "2026-09-06T01:00:00.000Z",
+    };
+    const unpinned = thread("unpinned", "write");
+    const settledPin = {
+      ...thread("settled-pin", "write", "2026-09-06T03:00:00.000Z"),
+      pinnedAt: "2026-09-06T03:00:00.000Z",
+    };
+    const all = [unpinned, olderPin, settledPin, pinned];
+    const selected = selectPinnedAgentThreads(all);
+    expect(selected.map((item) => item.id)).toEqual(["pinned", "older-pin"]);
+    expect(excludePinnedAgentThreads(all, selected).map((item) => item.id)).toEqual([
+      "unpinned",
+      "settled-pin",
+    ]);
+    expect(excludePinnedAgentThreads([unpinned], [])).toEqual([unpinned]);
   });
 });
 

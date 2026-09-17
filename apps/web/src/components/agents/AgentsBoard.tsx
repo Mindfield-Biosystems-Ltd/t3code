@@ -5,7 +5,7 @@ import { useAgentThreadContextMenu } from "./useAgentThreadContextMenu";
 import * as Schema from "effect/Schema";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { Menu, MenuTrigger, MenuPopup, MenuItem } from "../ui/menu";
-import { AgentIcon, agentColors } from "./AgentIcon";
+import { AgentIcon, agentColorFor } from "./AgentIcon";
 import { Link, Outlet, useLocation } from "@tanstack/react-router";
 import { useMemo, useState, type CSSProperties } from "react";
 import {
@@ -28,7 +28,12 @@ import { useThreadShells, useAllEnvironmentShellsBootstrapped } from "../../stat
 import { AgentEditor } from "./AgentEditor";
 import { AgentTaskDialog } from "./AgentTaskDialog";
 import { AgentsLoadingNotice } from "./AgentsLoadingNotice";
-import { groupAgentThreads, selectAgentWorkspaceThreads } from "./agents.logic";
+import {
+  excludePinnedAgentThreads,
+  groupAgentThreads,
+  selectAgentWorkspaceThreads,
+  selectPinnedAgentThreads,
+} from "./agents.logic";
 import { DesktopUpdateButton } from "../sidebar/SidebarUpdatePill";
 import { BrandMark } from "../BrandMark";
 import { openCommandPalette } from "../../commandPaletteBus";
@@ -40,11 +45,13 @@ const emptyAgentOrder: readonly string[] = [];
 
 function AgentThreadList({
   threads,
+  pinned,
   onContextMenu,
   profiles,
 }: {
   profiles: readonly McpGatewayProfile[];
   threads: readonly EnvironmentThreadShell[];
+  pinned: readonly EnvironmentThreadShell[];
   onContextMenu: (
     thread: EnvironmentThreadShell,
     position: { x: number; y: number },
@@ -63,6 +70,12 @@ function AgentThreadList({
   );
   return (
     <div className="agent-thread-list">
+      {pinned.length > 0 && (
+        <div className="agent-pinned" aria-label="Pinned chats">
+          <div className="agent-pinned-label">Pinned</div>
+          {pinned.map(renderCard)}
+        </div>
+      )}
       {active.map(renderCard)}
       {settled.length > 0 && (
         <details
@@ -120,10 +133,13 @@ export function AgentsBoard() {
     [profiles, threads],
   );
   const allThreads = useMemo(() => [...groups.values(), orphaned].flat(), [groups, orphaned]);
+  // Pinned chats stay at the top of the list no matter which agent filter or
+  // search is active, so they are selected outside the filtered set.
+  const pinned = useMemo(() => selectPinnedAgentThreads(allThreads), [allThreads]);
   const visible = useMemo(() => {
     const { active, settled } = selectAgentWorkspaceThreads(threads, filter, query);
-    return [...active, ...settled];
-  }, [threads, filter, query]);
+    return excludePinnedAgentThreads([...active, ...settled], pinned);
+  }, [threads, filter, query, pinned]);
   const activeCount = (items: readonly EnvironmentThreadShell[]) =>
     items.filter((thread) => thread.settledAt === null).length;
   const online = environments.filter((env) => env.connection.phase === "connected");
@@ -210,12 +226,7 @@ export function AgentsBoard() {
               className="agent-filter-row"
               style={
                 {
-                  "--agent-color":
-                    profile.color ??
-                    agentColors[
-                      profiles.findIndex((item) => item.profileId === profile.profileId) %
-                        agentColors.length
-                    ],
+                  "--agent-color": agentColorFor(profile, profiles),
                 } as CSSProperties
               }
             >
@@ -319,20 +330,33 @@ export function AgentsBoard() {
                     disabled={profile.runtimeMode === "read-only"}
                     onClick={() => setTask(profile)}
                   >
-                    <AgentIcon icon={profile.icon} />
-                    {profile.name}
+                    <span
+                      className="agents-new-chat-option"
+                      style={{ "--agent-color": agentColorFor(profile, profiles) } as CSSProperties}
+                    >
+                      <AgentIcon icon={profile.icon} />
+                      <span className="agents-new-chat-option-body">
+                        <span className="agents-new-chat-option-name">{profile.name}</span>
+                        {profile.description && (
+                          <span className="agents-new-chat-option-description">
+                            {profile.description}
+                          </span>
+                        )}
+                      </span>
+                    </span>
                   </MenuItem>
                 ))}
               </MenuPopup>
             </Menu>
           </header>
-          {visible.length === 0 && (
+          {visible.length === 0 && pinned.length === 0 && (
             <p role="status" className="agent-empty">
               {query ? "No chats match your search." : "No threads here yet."}
             </p>
           )}
           <AgentThreadList
             threads={visible}
+            pinned={pinned}
             profiles={profiles}
             onContextMenu={onThreadContextMenu}
           />
