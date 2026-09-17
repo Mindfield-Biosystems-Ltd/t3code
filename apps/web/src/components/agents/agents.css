@@ -1136,3 +1136,36 @@
   max-height: 60%;
   overflow-y: auto;
 }
+
+.agent-gateway {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 320px;
+  font-size: 11px;
+  -webkit-app-region: no-drag;
+}
+.agent-gateway [role="status"] {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.agent-gateway-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted-foreground);
+}
+.agent-gateway[data-connected="true"] .agent-gateway-dot {
+  background: var(--success);
+}
+.agent-gateway-error {
+  flex-basis: 100%;
+  color: var(--destructive);
+}
+.agent-gateway button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

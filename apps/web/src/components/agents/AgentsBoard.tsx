@@ -1,3 +1,4 @@
+import { AgentGatewayStatus } from "./AgentGatewayStatus";
 import { SortableAgentThreads } from "./SortableAgentThreads";
 import { useClientSettings } from "../../hooks/useSettings";
 import { visibleAgentProviders } from "./agentModelCatalog";
@@ -178,6 +179,7 @@ export function AgentsBoard() {
             </button>
           )}
         </div>
+        <AgentGatewayStatus />
         <div className="agents-topbar-actions">
           <DesktopUpdateButton className="agent-icon-button agent-update-button" />
           <button

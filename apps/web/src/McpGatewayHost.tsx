@@ -19,6 +19,7 @@ import {
   publishMcpGatewayStatus,
   publishMcpGatewayStatusSnapshot,
   setMcpGatewayStatusRequester,
+  setMcpGatewayRestarter,
   subscribeMcpGatewayConfiguration,
 } from "./mcpGatewayState";
 import { appAtomRegistry } from "./rpc/atomRegistry";
@@ -44,13 +45,26 @@ export function McpGatewayHost({ router }: { readonly router: AppRouter }) {
     return subscribeMcpGatewayConfiguration(onChange);
   }, []);
 
+  const [restartVersion, setRestartVersion] = useState(0);
+  useEffect(() => {
+    setMcpGatewayRestarter(() => setRestartVersion((version) => version + 1));
+    return () => setMcpGatewayRestarter(null);
+  }, []);
+
   const nativeConfiguration = useMemo(
     () => ({
       enabled: configuration.available && configuration.enabled && configuration.token.length >= 16,
       token: configuration.token,
       port: configuration.port,
+      restartVersion,
     }),
-    [configuration.available, configuration.enabled, configuration.token, configuration.port],
+    [
+      configuration.available,
+      configuration.enabled,
+      configuration.token,
+      configuration.port,
+      restartVersion,
+    ],
   );
   const [readyConfiguration, setReadyConfiguration] = useState<typeof nativeConfiguration | null>(
     null,
@@ -70,9 +84,9 @@ export function McpGatewayHost({ router }: { readonly router: AppRouter }) {
         () => {
           if (!stopped) setReadyConfiguration(nativeConfiguration);
         },
-        (error) => {
+        () => {
           if (!stopped) {
-            console.error("MCP gateway startup failed", error);
+            console.error("MCP gateway startup failed");
             publishMcpGatewayStatus("degraded");
           }
         },
@@ -81,7 +95,7 @@ export function McpGatewayHost({ router }: { readonly router: AppRouter }) {
       stopped = true;
       void desktop
         .configureManagedMcpGateway?.(null)
-        .catch((error) => console.error("MCP gateway shutdown failed", error));
+        .catch(() => console.error("MCP gateway shutdown failed"));
     };
   }, [nativeConfiguration]);
 
@@ -125,8 +139,8 @@ export function McpGatewayHost({ router }: { readonly router: AppRouter }) {
               value.value,
               window.desktopBridge,
               Object.keys(configuration.grants),
-              (error) => {
-                console.error("MCP gateway relay failed", error);
+              () => {
+                console.error("MCP gateway relay failed");
                 publishMcpGatewayStatus("degraded");
               },
             );
