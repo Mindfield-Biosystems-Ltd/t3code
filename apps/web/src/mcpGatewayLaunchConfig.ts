@@ -4,7 +4,7 @@ import type { McpGatewayLaunchConfig } from "@t3tools/contracts";
 export function buildMcpGatewayHostConfig(
   launch: McpGatewayLaunchConfig,
   token: string,
-  port = 47631,
+  port: number,
 ) {
   const env = { ...launch.env, T3_MCP_BRIDGE_PORT: String(port), T3_MCP_BRIDGE_TOKEN: token };
   return {

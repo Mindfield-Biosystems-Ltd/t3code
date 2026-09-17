@@ -391,13 +391,15 @@ describe("shared MCP gateway", () => {
         args: [entryPoint],
         env: {
           ...launch.env,
-          T3_MCP_BRIDGE_PORT: String(input.port),
           // A missing explicit state-file regression must never touch the developer's store.
           T3CODE_HOME: NodePath.join(NodePath.dirname(input.stateFile), "fallback"),
         },
       },
       input.token,
+      input.port,
     ).opencode.mcp["t3-gateway"];
+    // Fail before spawning if the fixture could target the live desktop bridge port.
+    expect(host.environment.T3_MCP_BRIDGE_PORT).toBe(String(input.port));
     const client = new Client({ name: "opencode-config-regression", version: "1.0.0" });
     const transport = new StdioClientTransport({
       command: host.command[0]!,
