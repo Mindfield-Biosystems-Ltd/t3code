@@ -15,6 +15,8 @@ const state = vi.hoisted(() => ({
   projects: [] as unknown[],
   createThread: vi.fn(async () => ({})),
 }));
+const navigate = vi.hoisted(() => vi.fn());
+vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigate }));
 vi.mock("@effect/atom-react", () => ({ useAtomValue: () => ({ _tag: "Success", value: {} }) }));
 vi.mock("../../connection/runtime", () => ({ connectionAtomRuntime: {} }));
 vi.mock("../../state/environments", () => ({

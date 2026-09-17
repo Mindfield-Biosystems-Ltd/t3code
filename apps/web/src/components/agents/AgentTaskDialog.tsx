@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useAtomValue } from "@effect/atom-react";
 import {
   createGatewayRuntimePortFromContext,
@@ -30,6 +31,7 @@ export function AgentTaskDialog({
   onClose: () => void;
 }) {
   const runtime = useAtomValue(connectionAtomRuntime);
+  const navigate = useNavigate();
   const { environments } = useEnvironments();
   const projects = useProjects();
   const [initialDraft] = useState(() =>
@@ -120,7 +122,16 @@ export function AgentTaskDialog({
   };
   const finish = () => {
     useComposerDraftStore.getState().clearDraftThread(draftId);
+    // Open the new chat inside the Agents workspace instead of dropping the
+    // user back on the board with nothing selected.
+    const environmentId = target?.environmentId ?? draftSession?.environmentId;
     onClose();
+    if (environmentId) {
+      void navigate({
+        to: "/agents/$environmentId/$threadId",
+        params: { environmentId, threadId },
+      });
+    }
   };
   return (
     <Dialog
