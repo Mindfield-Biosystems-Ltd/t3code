@@ -2285,6 +2285,14 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
                   `mcp_servers.t3-code.url=${mcpSession.endpoint}`,
                   "-c",
                   'mcp_servers.t3-code.bearer_token_env_var="T3_MCP_BEARER_TOKEN"',
+                  ...(mcpSession.gatewayEndpoint
+                    ? [
+                        "-c",
+                        `mcp_servers.t3-gateway.url=${mcpSession.gatewayEndpoint}`,
+                        "-c",
+                        'mcp_servers.t3-gateway.bearer_token_env_var="T3_MCP_BEARER_TOKEN"',
+                      ]
+                    : []),
                 ],
                 mcpCapabilities: mcpSession.capabilities,
               }

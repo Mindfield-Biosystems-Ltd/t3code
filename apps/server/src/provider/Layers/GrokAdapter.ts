@@ -1015,19 +1015,12 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
               : {}),
             ...(mcpSession
               ? {
-                  mcpServers: [
-                    {
-                      type: "http" as const,
-                      name: "t3-code",
-                      url: mcpSession.endpoint,
-                      headers: [
-                        {
-                          name: "Authorization",
-                          value: mcpSession.authorizationHeader,
-                        },
-                      ],
-                    },
-                  ],
+                  mcpServers: McpProviderSession.mcpHttpServers(mcpSession).map((mcp) => ({
+                    type: "http" as const,
+                    name: mcp.name,
+                    url: mcp.url,
+                    headers: [{ name: "Authorization", value: mcp.authorizationHeader }],
+                  })),
                 }
               : {}),
             ...acpNativeLoggers,

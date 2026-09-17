@@ -1,3 +1,4 @@
+import { activeGatewayAvailable } from "../../mcp/McpGatewayBroker.ts";
 import { syncAgentInstructionFile } from "../AgentInstructionFiles.ts";
 /**
  * ProviderServiceLive - Cross-provider orchestration layer.
@@ -936,6 +937,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     threadId: ThreadId,
   ) {
     const capabilities = new Set<McpInvocationContext.McpCapability>(["pull-requests"]);
+    if (activeGatewayAvailable()) capabilities.add("gateway");
     const access = yield* agentAccessSettings(threadId);
     if (access.browser) capabilities.add("preview");
     if (access.device) capabilities.add("device");

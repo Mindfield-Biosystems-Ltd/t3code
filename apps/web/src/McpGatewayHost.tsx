@@ -1,11 +1,12 @@
 import {
   connectGatewayBridge,
+  connectManagedGatewayRelays,
   createGatewayRuntimeEventSourceFromContext,
   createGatewayRuntimePortFromContext,
 } from "@t3tools/client-runtime/gateway";
 import * as Option from "effect/Option";
 import { AsyncResult } from "effect/unstable/reactivity";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { AppRouter } from "./router";
 import { openDesktopGatewayThread, openDesktopGatewayAgents } from "./mcpGatewayNavigation";
@@ -43,8 +44,54 @@ export function McpGatewayHost({ router }: { readonly router: AppRouter }) {
     return subscribeMcpGatewayConfiguration(onChange);
   }, []);
 
+  const nativeConfiguration = useMemo(
+    () => ({
+      enabled: configuration.available && configuration.enabled && configuration.token.length >= 16,
+      token: configuration.token,
+      port: configuration.port,
+    }),
+    [configuration.available, configuration.enabled, configuration.token, configuration.port],
+  );
+  const [readyConfiguration, setReadyConfiguration] = useState<typeof nativeConfiguration | null>(
+    null,
+  );
+  const managedReady = nativeConfiguration.enabled && readyConfiguration === nativeConfiguration;
   useEffect(() => {
-    if (!configuration.available || !configuration.enabled || configuration.token.length < 16) {
+    let stopped = false;
+    const desktop = window.desktopBridge;
+    if (!desktop?.configureManagedMcpGateway) return;
+    void desktop
+      .configureManagedMcpGateway(
+        nativeConfiguration.enabled
+          ? { token: nativeConfiguration.token, port: nativeConfiguration.port }
+          : null,
+      )
+      .then(
+        () => {
+          if (!stopped) setReadyConfiguration(nativeConfiguration);
+        },
+        (error) => {
+          if (!stopped) {
+            console.error("MCP gateway startup failed", error);
+            publishMcpGatewayStatus("degraded");
+          }
+        },
+      );
+    return () => {
+      stopped = true;
+      void desktop
+        .configureManagedMcpGateway?.(null)
+        .catch((error) => console.error("MCP gateway shutdown failed", error));
+    };
+  }, [nativeConfiguration]);
+
+  useEffect(() => {
+    if (
+      !configuration.available ||
+      !configuration.enabled ||
+      configuration.token.length < 16 ||
+      !managedReady
+    ) {
       publishMcpGatewayStatus(configuration.enabled ? "degraded" : "disabled");
       publishMcpGatewayStatusSnapshot(null);
       setMcpGatewayStatusRequester(null);
@@ -55,6 +102,7 @@ export function McpGatewayHost({ router }: { readonly router: AppRouter }) {
     let bridge: ReturnType<typeof connectGatewayBridge> | null = null;
     let unsubscribe: (() => void) | null = null;
     let stopped = false;
+    let stopRelays: (() => void) | undefined;
     const startWhenReady = () => {
       if (stopped || bridge !== null) return;
       const value = AsyncResult.value(appAtomRegistry.get(connectionAtomRuntime));
@@ -70,7 +118,23 @@ export function McpGatewayHost({ router }: { readonly router: AppRouter }) {
         grants: configuration.grants,
         token: configuration.token,
         url: `ws://127.0.0.1:${configuration.port}`,
-        onState: publishMcpGatewayStatus,
+        onState: (state) => {
+          publishMcpGatewayStatus(state);
+          if (state === "running" && !stopRelays && window.desktopBridge) {
+            stopRelays = connectManagedGatewayRelays(
+              value.value,
+              window.desktopBridge,
+              Object.keys(configuration.grants),
+              (error) => {
+                console.error("MCP gateway relay failed", error);
+                publishMcpGatewayStatus("degraded");
+              },
+            );
+          } else if (state === "degraded" || state === "disabled") {
+            stopRelays?.();
+            stopRelays = undefined;
+          }
+        },
         onStatusSnapshot: publishMcpGatewayStatusSnapshot,
       });
       setMcpGatewayStatusRequester(() => bridge?.requestStatus() ?? false);
@@ -84,12 +148,13 @@ export function McpGatewayHost({ router }: { readonly router: AppRouter }) {
     return () => {
       stopped = true;
       unsubscribe?.();
+      stopRelays?.();
       bridge?.stop();
       setMcpGatewayStatusRequester(null);
       publishMcpGatewayStatusSnapshot(null);
       unmountRuntime();
     };
-  }, [configuration, router]);
+  }, [configuration, router, managedReady]);
 
   return null;
 }

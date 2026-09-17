@@ -116,3 +116,9 @@ export const PREVIEW_POINTER_EVENT_CHANNEL = "desktop:preview-pointer-event";
 export const MAC_PERMISSION_HELPER_CHANNEL = "desktop:mac-permission-helper";
 
 export const CHECK_SYSTEM_PERMISSION_CHANNEL = "desktop:check-system-permission";
+
+export const CONFIGURE_MANAGED_MCP_GATEWAY_CHANNEL = "desktop:configure-managed-mcp-gateway";
+export const SEND_MANAGED_MCP_GATEWAY_MESSAGE_CHANNEL = "desktop:send-managed-mcp-gateway-message";
+export const CLOSE_MANAGED_MCP_GATEWAY_SESSION_CHANNEL =
+  "desktop:close-managed-mcp-gateway-session";
+export const MANAGED_MCP_GATEWAY_EVENT_CHANNEL = "desktop:managed-mcp-gateway-event";

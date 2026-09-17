@@ -1,3 +1,4 @@
+import type { McpGatewayDesktopEvent, McpGatewayDesktopMessage } from "./mcpGateway.ts";
 import type {
   VcsCreateRefInput,
   VcsCreateRefResult,
@@ -1220,6 +1221,10 @@ export type SystemSettingsPane = typeof SystemSettingsPaneSchema.Type;
 export interface DesktopBridge {
   getAppBranding: () => DesktopAppBranding | null;
   getMcpGatewayLaunchConfig?: () => McpGatewayLaunchConfig | null;
+  configureManagedMcpGateway?: (input: { token: string; port: number } | null) => Promise<void>;
+  sendManagedMcpGatewayMessage?: (input: McpGatewayDesktopMessage) => Promise<void>;
+  closeManagedMcpGatewaySession?: (sessionId: string) => Promise<void>;
+  onManagedMcpGatewayEvent?: (listener: (event: McpGatewayDesktopEvent) => void) => () => void;
   getMcpGatewayBridgeToken?: () => string | null;
   /** Absolute path of a dropped or picked file; absent on desktop builds predating it. */
   getPathForFile?: (file: File) => string;
